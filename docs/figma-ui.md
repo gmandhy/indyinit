@@ -12,7 +12,7 @@ Intentional data adaptations:
 
 - The design's historic results are replaced by measured trials and honest empty states.
 - Finger PIP range is labeled as an estimate, never substituted for a wrist angle. Synthetic replay is filtered separately from live trials. Sensor modes are separated.
-- The illustrated routine is manual practice with self-reported completion. Pause applies to that routine; timed sensor trials retain the existing abort/recalibration contract.
+- The guided routine includes a user-started live camera preview through the shared session controller, with Start/Stop and visible retry errors. Entering guided practice selects live input. Repetitions and completion remain self-reported; Pause applies to the manual routine, and timed sensor trials retain the existing abort/recalibration contract.
 - Check-in scheduling, clinical targets, pain measurements, authentication, and cloud persistence are not implemented or implied by decorative controls.
 - Session navigation stops active devices. Compact workstation layout changes preserve the current session.
 

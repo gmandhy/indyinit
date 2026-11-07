@@ -328,3 +328,9 @@ Verification performed: npm ci --engine-strict=false installed the lockfile (0 v
 Not run for this UI change: unit suite, browser workflow suite, interactive visual QA, live camera/microphone checks, performance/tap/noise gates. The user will test afterwards. No claim of full release acceptance, clinical accuracy, or hardware acceptance is made. Existing palm-calibration rejection remains unresolved. No external deployment, AI reporting, or P2 expansion was performed.
 
 Next: user visual/workflow review, then run the documented automated checks and hardware acceptance procedure as requested. Inspect narrow layouts, both trial and manual routes, date checkmarks, filters, export/reset, and device release after leaving Session.
+
+## 2026-11-07 — Guided Session camera integration
+
+The guided Session route previously displayed only an exercise illustration and never received the session controller props. It now uses the existing mirrored camera/skeleton viewport, with explicit Start/Stop controls and visible permission/setup errors. Entering guided practice selects live input even after synthetic replay. Hardware remains owned by the existing controller, including cleanup when leaving Session. Manual repetition recording and wrist-measurement limits remain explicit.
+
+Added an unrun Playwright regression for guided camera controls, no permission request before Start, denial/retry, stop, switching from replay, and manual repetitions. Per the user's request, no tests, typecheck, build, or live-device checks were run. User verification and the existing hardware acceptance gates remain pending.

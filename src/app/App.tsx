@@ -36,7 +36,7 @@ export function App() {
   }, [session.snapshot.result]);
   function navigate(next: PageName) { window.location.hash = next; setPage(next); }
   function trial() { setGuided(false); navigate('session'); }
-  function practice(index = 0) { session.commands.stop(); setTask(index); setGuided(true); setDate(dayKey()); navigate('session'); }
+  function practice(index = 0) { session.commands.stop(); setSource('live'); setTask(index); setGuided(true); setDate(dayKey()); navigate('session'); }
   function toggle(index: number, value?: boolean) {
     setChecks(previous => {
       const current = previous[date] ?? [];
@@ -49,7 +49,7 @@ export function App() {
     {page === 'home' && <Dashboard completed={checks[dayKey()] ?? []} records={records} trial={trial} routine={() => navigate('exercises')} practice={practice}/>}
     {page === 'exercises' && <Exercises date={date} setDate={setDate} completed={checks[date] ?? []} toggle={toggle} begin={practice}/>}
     {page === 'session' && <><div className="session-tabs" aria-label="Session type"><button aria-pressed={!guided} onClick={() => setGuided(false)}>Tracked trial</button><button aria-pressed={guided} onClick={() => practice(task)}>Guided routine</button></div>
-      {guided ? <GuidedRoutine key={task} task={task} setTask={setTask} complete={index => toggle(index, true)} back={() => navigate('exercises')}/> : <TrackedSession {...session} source={source} setSource={setSource} back={() => navigate('exercises')}/>}
+      {guided ? <GuidedRoutine {...session} key={task} task={task} setTask={setTask} complete={index => toggle(index, true)} back={() => navigate('exercises')}/> : <TrackedSession {...session} source={source} setSource={setSource} back={() => navigate('exercises')}/>}
     </>}
     {page === 'progress' && <Progress records={records} clear={() => { session.commands.reset(); setRecords([]); }} trial={trial}/>}
   </Shell>;

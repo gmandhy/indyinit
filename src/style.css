@@ -10,3 +10,5 @@ progress{display:block;width:100%;height:12px;appearance:none;border:0;border-ra
 /* Keep source artwork fully visible when a routine row wraps. */
 @media(min-width:641px) and (max-width:960px){.routine-item{flex-wrap:wrap}.routine-item .hand-image{width:248px;height:128px}.routine-item .illustration-button{margin-left:auto}.routine-copy{min-width:210px}}
 @media(max-width:380px){.routine-item .illustration-button{margin-left:0}.sidebar{gap:8px}.sidebar nav a{padding:8px}.routine-copy{min-width:180px}.home-exercise .hand-image.small{width:80px}.completion-line{flex-wrap:wrap}.welcome h2{font-size:27px}}
+
+.routine-camera-status{padding:0 20px;font-size:14px;overflow-wrap:anywhere}.camera-toolbar>div{display:flex;flex-wrap:wrap;gap:8px}

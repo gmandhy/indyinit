@@ -2,6 +2,31 @@ import {test,expect} from '@playwright/test';
 import type {Page} from '@playwright/test';
 import {parseTelemetryJson} from '../src/lib/schemas';
 const status=(page:Page)=>page.locator('section[aria-labelledby="status"]');
+test('guided routine exposes a user-started camera, retry errors, and manual repetitions',async({page})=>{
+ await page.addInitScript(()=>{
+  let requests=0;
+  Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{
+   requests++;document.documentElement.dataset.cameraRequests=String(requests);
+   throw new DOMException('Browser test denied device','NotAllowedError');
+  }});
+ });
+ await page.goto('/#session');
+ await page.getByRole('combobox',{name:'Source',exact:true}).selectOption('synthetic_replay');
+ await page.getByRole('button',{name:'Guided routine',exact:true}).click();
+ await expect(page.getByText('Live camera · manual practice',{exact:true})).toBeVisible();
+ await expect(page.locator('canvas')).toHaveAccessibleName('Mirrored live video and hand skeleton; click to place desk ring during setup');
+ await expect(page.locator('html')).not.toHaveAttribute('data-camera-requests');
+ await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ await expect(page.locator('.routine-camera-status[role="status"]')).toContainText('denied');
+ await expect(page.locator('html')).toHaveAttribute('data-camera-requests','1');
+ await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ await expect(page.locator('html')).toHaveAttribute('data-camera-requests','2');
+ await page.getByRole('button',{name:'Stop camera',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Your movement, in view',exact:true})).toBeVisible();
+ await expect(page.getByText('0 / 5',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Record repetition',exact:true}).click();
+ await expect(page.getByText('1 / 5',{exact:true})).toBeVisible();
+});
 async function replay(page:Page){
  await page.clock.install({time:new Date('2026-11-07T12:00:00Z')});await page.goto('/#session');await page.clock.pauseAt(new Date('2026-11-07T12:00:01Z'));
  await page.getByRole('combobox',{name:'Source',exact:true}).selectOption('synthetic_replay');await page.getByRole('button',{name:'Start replay adapter',exact:true}).click();
