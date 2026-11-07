@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="1313" height="994" viewBox="0 0 1313 994" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path id="Page background wave" d="M0 70C220 70 340 0 530 0C670 0 710 100 940 100C1110 100 1180 50 1313 50V994H0V70Z" fill="url(#paint0_linear_0_26)"/>
+<defs>
+<linearGradient id="paint0_linear_0_26" x1="0" y1="0" x2="0" y2="994" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FCE7ED" stop-opacity="0.501961"/>
+<stop offset="1" stop-color="#FCE7ED" stop-opacity="0.12549"/>
+</linearGradient>
+</defs>
+</svg>

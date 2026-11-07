@@ -311,3 +311,20 @@ The passing air/restart Playwright request audit asserts that every observed bro
 5. Open browser Network with Preserve log during actual live trials and recovery. Confirm only local asset requests, no frame/PCM/landmark or telemetry submission. Do not attach raw captured media to the handoff. Record any failure and retest affected paths before marking this gate passed.
 
 Next: complete and record these live checks in this same phase. Once all live P0 gates pass, begin Phase 7 in a fresh chat using its roadmap prompt. No Phase 7 work was started.
+
+## 2026-11-07 — Figma presentation integration
+
+User requested the complete Figma UI integrated into the existing stage 6 project, then explicitly redirected this pass to finish UI changes first and leave deeper testing to them. This authorizes presentation work despite the previously documented hardware gate; it does not mark that gate passed.
+
+Implemented:
+- Four Figma-derived screens: Home, Exercises, Session, and Progress; responsive sidebar/navigation, cards, pink/teal palette, local illustrations, date controls, profile information, focus and reduced-motion styling.
+- Manual guided routine with repetition/set controls, pause/resume, next/skip, and self-reported completion. Skipping never grants completion. Date-specific checkmarks stay in memory.
+- Existing controller-backed camera/replay workstation, device/calibration controls, fixed trials, source/mode labels, fullscreen, compact layout, results/export, and collapsible diagnostics. Leaving Session stops devices; engine algorithms and thresholds remain unchanged.
+- Bounded 50-result memory-only history; live/replay, mode, hand, and period filtering; measured finger-range chart and tap counts; clear-history control. Missing clinical targets, wrist angles, pain, appointment data, and historic gains remain unavailable.
+- Local Figma assets and integration notes in docs/figma-ui.md. Existing browser tests updated for /#session and the Compact workstation label.
+
+Verification performed: npm ci --engine-strict=false installed the lockfile (0 vulnerabilities reported); npm run assets:prepare verified 6 pinned assets; npm run build passed asset verification, strict TypeScript, and the Vite production build. Environment Node 24.14.0 / npm 11.9.0 differs from the exact repository pins 24.12.0 / 11.6.2; the install override was explicit and the pins were preserved. Playwright Chromium was prepared before the user's testing deferral.
+
+Not run for this UI change: unit suite, browser workflow suite, interactive visual QA, live camera/microphone checks, performance/tap/noise gates. The user will test afterwards. No claim of full release acceptance, clinical accuracy, or hardware acceptance is made. Existing palm-calibration rejection remains unresolved. No external deployment, AI reporting, or P2 expansion was performed.
+
+Next: user visual/workflow review, then run the documented automated checks and hardware acceptance procedure as requested. Inspect narrow layouts, both trial and manual routes, date checkmarks, filters, export/reset, and device release after leaving Session.

@@ -1,6 +1,20 @@
 # ITap
 
-Browser-native, rehabilitation-inspired hackathon prototype. **Phase 6 provides setup, calibration, countdown, a fixed 15-second trial, local results, validated JSON export, and reset** for air and desk modes. Live acceptance remains pending, including the observed straight-pose palm-calibration rejection and the three-session/tap/noise gates. See the progress record. This is not a validated clinical device. No backend, account, API key, or UI library is required.
+Browser-native, rehabilitation-inspired hackathon prototype. **The Figma UI is integrated; deeper testing is deferred to the user. Phase 6 provides setup, calibration, countdown, a fixed 15-second trial, local results, validated JSON export, and reset** for air and desk modes. Live acceptance remains pending, including the observed straight-pose palm-calibration rejection and the three-session/tap/noise gates. See the progress record. This is not a validated clinical device. No backend, account, API key, or UI library is required.
+
+## Figma UI
+
+The integrated presentation opens on **Home**. Sidebar **Session** opens the illustrated exercise routine; **Start Session** on Home opens the existing camera/replay workstation. **Progress** shows actual trial summaries, separated by source, sensor mode, hand, and period.
+
+- Home, Exercises, Session, and Progress use the iTap Figma palette, layout, and local design assets.
+- Guided practice provides manual repetitions, two sets, pause/resume, next/skip, and date-specific completion checkboxes. These are self-reported, not camera-scored wrist exercises or a clinical prescription.
+- Tracked trials retain the phase 6 controller, calibration, air/fused/kinematic modes, countdown, results, and validated JSON export. Navigating away from Session stops devices and ends an active trial; changing its compact layout preserves the controller.
+- Progress holds the last 50 summaries in memory in the current tab. Reload clears them; Clear history also resets the current trial. No fabricated wrist angles, pain scores, targets, historical gains, or check-in dates are displayed.
+- Layouts adapt to desktop and narrow windows, with keyboard focus, a skip link, reduced-motion support, and a fullscreen camera control.
+
+The current UI integration received a compile/build check only. The user requested that deeper automated, browser, and hardware testing be deferred to their own testing pass. Existing Playwright entry points have been updated to `/#session` for that pass. Prior live hardware/calibration gates remain pending.
+
+Run `npm run dev` from this directory, or build and use `npm run preview` for a production preview. Navigation uses `#home`, `#exercises`, `#session`, and `#progress`.
 
 ## Setup
 
@@ -108,4 +122,5 @@ npm run test:e2e
 
 If Google Chrome is already installed, `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e` selects that browser without downloading Playwright Chromium. The default uses Playwright's matching Chromium. Tests use only localhost port 4176 and artificial observations or deliberately denied device requests. They verify full air/fused/kinematic workflows, export reconciliation, reset/restart, hidden-tab/mode aborts and permission/asset recovery. The replay request audit records URL, method and payload size and requires same-origin GETs with no request bodies; it does not establish live media privacy or accuracy.
 
-For live acceptance, use the exact operator checks in the Phase 6 progress entry: resolve palm calibration, measure stable tracking, complete three fused 15-second trials, then record 20 deliberate taps (at least 18 accepted) and 20 noise/no-contact trials (at most one false acceptance). Inspect Network during those live runs. Until recorded, Phase 6's live gate is pending and Phase 7 presentation work must wait.
+For live acceptance, use the exact operator checks in the Phase 6 progress entry: resolve palm calibration, measure stable tracking, complete three fused 15-second trials, then record 20 deliberate taps (at least 18 accepted) and 20 noise/no-contact trials (at most one false acceptance). Inspect Network during those live runs. Until recorded, Phase 6's live gate remains pending. The Figma presentation was integrated at the user's explicit request; this does not satisfy that hardware gate.
+
