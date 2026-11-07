@@ -1,43 +1,48 @@
-# AGENTS.md ITap Operational Protocol
+# AGENTS.md — ITap / ITap Operational Protocol
 
-## 1. ITap Identity
-**HoloRehab** is a browser-native, clinical-grade spatial and vibro-acoustic hand physical therapy workstation. It fuses 60 FPS 3D computer vision (`@mediapipe/tasks-vision`), trigonometric goniometry, and Web Audio API desk-tap impulse detection to track range of motion (ROM), block compensatory wrist cheating, and generate insurance-ready clinical SOAP notes.
+## 1. Identity and required reading
 
-Read `@design.md` (or `design.md`) for full mathematical formulas, landmark indices, state machines, and Zod schemas before implementing any feature.
+ITap is a browser-native, rehabilitation-inspired hackathon prototype combining local CV hand tracking with holographic desk-target tapping and camera/microphone event matching. It is not a validated clinical device or an insurance-ready reporting system.
 
-## 2. Tech Stack & Commands
-- **Framework:** Next.js (App Router) or Vite + React 19, TypeScript (Strict Mode), Tailwind CSS, Lucide Icons, Recharts.
-- **Vision & Audio:** `@mediapipe/tasks-vision` (`HandLandmarker`), native Web Audio API (`AudioContext`, `AnalyserNode`).
-- **Validation & Testing:** `zod` for runtime schema enforcement, `vitest` for deterministic math/DSP unit tests.
+Before implementation read `docs/design.md`, `docs/features.md`, `docs/pages.md`, and root `roadmap.md`. The design contains coordinate contracts, formulas, state machines, privacy rules, and schema requirements. The roadmap owns phase order. Do not implement from the original unsupported clinical claims.
 
-### Executable Commands
-- Install: `npm install`
-- Dev Server: `npm run dev`
-- Typecheck: `npx tsc --noEmit`
-- Run Unit Tests: `npx vitest run`
-- Build Check: `npm run build`
+## 2. Selected stack and commands
 
-## 3. Core Engineering Principles (Mandatory)
-1. **Fail Fast on Preconditions:** Throw explicit, descriptive errors immediately when preconditions fail (e.g., invalid landmark array length !== 21, zero-magnitude bone vectors, uninitialized `AudioContext`, missing env vars). Never swallow errors with silent `catch {}` blocks or fallback dummy values that mask broken math.
-2. **Fix Root Causes, Never Symptoms:** If frame rates drop or angles jitter, fix the underlying lifecycle leak or vector normalization math—do not slap `setTimeout` or arbitrary magic multipliers on the output.
-3. **Challenge Faulty Assumptions:** If a prompt asks for something physically or architecturally flawed (e.g., measuring Newtons of force from RGB pixels alone, or streaming raw webcam frames over HTTP), stop and propose the mathematically valid alternative defined in `design.md`.
-4. **Zero-Video-Egress Privacy Boundary:** Raw webcam frames and microphone audio streams MUST NEVER leave the client browser. Only validated, anonymized telemetry JSON (`SessionTelemetrySchema`) may be sent to the LLM API route.
+- Vite + React 19, strict TypeScript, Canvas 2D; semantic HTML/CSS stubs initially.
+- `@mediapipe/tasks-vision` HandLandmarker; native Web Audio AudioWorklet for continuous impulse detection.
+- Zod runtime validation, Vitest deterministic tests, Playwright browser tests when introduced.
+- Tailwind, Lucide, Recharts optional in the late UI phase. No mandatory backend for the demo.
 
-## 4. Silent Invariants & Hardware Gotchas (Do Not Violate)
-- **NEVER install deprecated `@mediapipe/hands`:** Always use `@mediapipe/tasks-vision` (`FilesetResolver` + `HandLandmarker.createFromOptions`).
-- **Client-Only Hardware Execution:** Any component touching `navigator.mediaDevices`, `AudioContext`, or `HandLandmarker` must be strictly client-side (`"use client"`) and initialized inside a guarded lifecycle hook with proper cleanup (`cancelAnimationFrame`, `audioContext.close()`).
-- **Avoid React State in the 60 FPS Loop:** Do NOT call `setState` on every `requestAnimationFrame` tick for raw landmark coordinates—it will thrash the React reconciliation tree. Mutate a `useRef` for 60 FPS canvas rendering and throttle React UI state updates (charts/angle readouts) to 10–15 Hz (`~66-100ms`).
-- **Mirroring Invariant:** Webcam video is mirrored horizontally (`scaleX(-1)`) for natural user interaction. Ensure canvas coordinate math and text overlays account for mirrored X-coordinates (`1.0 - landmark.x`).
+Phase 1 establishes these commands; they do not exist in the documentation-only starting repository:
 
-## 5. Development Workflow & Phased Execution
-Work strictly in order of priority (`P0` -> `P1` -> `P2` in `design.md`). After completing each module:
-1. Run `npx tsc --noEmit` to verify zero type regressions.
-2. Pure math and DSP functions (`src/lib/biomechanics.ts`, `src/lib/acousticTap.ts`) MUST have corresponding deterministic tests in `src/lib/__tests__/`. Run `npx vitest run` and ensure 100% pass rate before wiring into the UI.
-3. Keep commits atomic and verify the live camera/canvas loop remains at 60 FPS.
+- Install: `npm install`; reproducible subsequent install: `npm ci`.
+- Dev: `npm run dev`.
+- Typecheck: `npx tsc --noEmit` (configure this to check application, worker, and test code).
+- Unit tests: `npx vitest run`.
+- Build: `npm run build`.
+- Browser tests once added: `npm run test:e2e`.
 
-## 6. Reference Index
-- Biomechanical 3D math, Landmark IDs & Cheat Thresholds -> `design.md#3-biomechanical-math--3d-goniometry-engine`
-- Spatial Target Collision & Calibration -> `design.md#4-spatial-holo-target-engine--mechanics`
-- Vibro-Acoustic Desk Tap Sensor Fusion -> `design.md#5-vibro-acoustic-desk-tap-sensor-fusion`
-- Zod Telemetry & SOAP Note Schemas -> `design.md#6-data-schemas--ai-clinical-pipeline`
-- Stretch Mechanics (Ghost Hand, Mirroring, Tremor) -> `design.md#7-p2-creative-stretch-mechanics`
+## 3. Mandatory engineering rules
+
+1. Fail fast in pure functions on invalid length, nonfinite inputs, degenerate vectors, and invalid time. Runtime boundaries turn expected tracking loss/device failures into explicit states, never dummy zeros or silent catches.
+2. Fix root causes of dropped frames, timing mismatches, and jitter; keep thresholds named, unit-bearing, documented, and validated. Do not hide defects with timeouts or arbitrary output multipliers.
+3. Challenge physically invalid claims. Image landmarks do not measure impact force, absolute desk depth, nerve conduction, or clinical wrist angles. Use the defined estimates and proxies.
+4. Raw camera frames and microphone audio never leave the browser or enter persistence/logging. Only deliberately submitted, validated, minimized summary telemetry may reach an optional reporting server. Do not call it guaranteed anonymous.
+5. Keep engine logic independent of React and replaceable UI stubs. Do not implement visual polish before the required live core is proven.
+
+## 4. Hardware invariants
+
+- Never install deprecated `@mediapipe/hands`. Pin Tasks Vision and its matching local WASM/model assets.
+- Hardware is client-only and initialized after user action in an owned lifecycle. In Vite no `"use client"` directive is required; use it if porting to Next.js.
+- Dispose media tracks, frame callbacks, audio nodes/context, landmarker, workers, and bitmaps; handle Strict Mode and late initialization promises.
+- Avoid React state updates for raw high-frequency samples. Draw from refs; publish UI snapshots at 10–15 Hz.
+- Mirror video and skeleton exactly once, preserving letterboxing/aspect ratio and readable labels. Share forward/inverse coordinate transforms.
+- World landmarks are for within-hand math; source-pixel coordinates are for collision and motion. Never combine their units.
+- Measure rendering and inference separately. Aim for 60 FPS rendering; never promise 60 FPS inference without evidence. Apply design acceptance budgets on the actual demo hardware.
+- Timestamp events at capture/sample time, align clocks, and match both event arrival orders. Fallback and replay modes must be explicit.
+
+## 5. Workflow and handoff
+
+Follow P0 -> P1 -> optional P2 in `roadmap.md`; both CV and desk tapping are P0. After each implementation module run typecheck, unit tests, and build. Pure math/DSP in `src/lib/biomechanics.ts` and `src/lib/acousticTap.ts` needs deterministic tests in `src/lib/__tests__/` passing before UI integration. Use browser tests for integration; live device evidence is a separate gate.
+
+Keep changes focused and commits atomic when commits are requested. At the end of a phase update `docs/progress.md` with scope, commands/results, hardware evidence or pending checks, decisions, known issues, and the next phase. Never mark hardware acceptance passed based on synthetic tests. A new phase begins in a fresh chat using its roadmap prompt; follow-ups for the same phase can stay in that chat.

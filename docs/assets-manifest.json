@@ -1,0 +1,45 @@
+{
+  "tasksVisionVersion": "1.2.2",
+  "modelVersion": "hand_landmarker/float16/1",
+  "license": "Apache-2.0",
+  "provenance": "https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker",
+  "assets": [
+    {
+      "path": "mediapipe/wasm/vision_wasm_internal.js",
+      "packagePath": "wasm/vision_wasm_internal.js",
+      "url": "https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-1.2.2.tgz",
+      "sha256": "f2b9c17131ea79716ec6bf07b117a087b2749a6f8a1e2f1f2e77a9382092db5b"
+    },
+    {
+      "path": "mediapipe/wasm/vision_wasm_internal.wasm",
+      "packagePath": "wasm/vision_wasm_internal.wasm",
+      "url": "https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-1.2.2.tgz",
+      "sha256": "f5bd25147ac89d506074293ce2675969b10e827180db95a0d9689c2ed80764ab"
+    },
+    {
+      "path": "mediapipe/wasm/vision_wasm_module_internal.js",
+      "packagePath": "wasm/vision_wasm_module_internal.js",
+      "url": "https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-1.2.2.tgz",
+      "sha256": "72fba0ac8a4034ce9d63f68389df1dead52069409ea621688eedf97f01d4362f"
+    },
+    {
+      "path": "mediapipe/wasm/vision_wasm_module_internal.wasm",
+      "packagePath": "wasm/vision_wasm_module_internal.wasm",
+      "url": "https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-1.2.2.tgz",
+      "sha256": "b8927a2eebfe80dd98a426a210a9e820c8215168c06f3bcf5d4d09080f623db5"
+    },
+    {
+      "path": "models/hand_landmarker.task",
+      "url": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
+    },
+    {
+      "path": "mediapipe/LICENSE-2.0.txt",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ],
+  "recordedDate": "2026-11-07",
+  "modelLicenseSource": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20%28Lite_Full%29%20with%20Fairness%20Oct%202021.pdf",
+  "licenseEvidence": "Model card page 2 and installed npm package metadata: Apache-2.0"
+}

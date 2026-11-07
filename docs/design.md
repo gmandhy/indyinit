@@ -1,252 +1,197 @@
-# HoloRehab — System Architecture & Engineering Specification (`design.md`)
+# ITap — Hackathon Engineering Specification
 
-## 1. Executive Summary & Judging Alignment
-**HoloRehab** transforms any standard laptop into a multi-sensor hand physical therapy and remote therapeutic monitoring (RTM) station.
-- **Problem:** 70% of hand therapy patients fail home regimens because they cannot measure 2–3° range-of-motion (ROM) gains, unconsciously "cheat" stiff finger movements by tilting their wrist, and lack objective telemetry required for insurance coverage.
-- **Solution:** Combines 60 FPS 3D skeletal hand tracking (`@mediapipe/tasks-vision`), deterministic vector trigonometry, and **vibro-acoustic desk-tapping sensor fusion** (correlating camera kinematics with Web Audio API microphone impulse waveforms) to guide exercises, reject compensatory cheats in real time, and generate CPT-coded clinical SOAP reports.
-- **Indy Init Rubric Alignment:**
-  - *Working App & Interactivity:* Judges test mid-air spatial targets and physical table-tapping live at the table in under 60 seconds.
-  - *Software Factory & Engineering Quality:* Deterministic unit test suite (`vitest`) verifying 3D vector trigonometry and acoustic impulse correlation, strict `zod` contract boundaries, zero-video-egress HIPAA-safe architecture, and a live observability HUD (FPS, frame latency, token cost).
+## 1. Goal, scope, and evidence
 
----
+Build a browser-native hand exercise prototype in which a judge sees their tracked hand, reaches on-screen targets, and taps a real desk to activate a holographic target overlay. A complete demo includes local CV hand tracking, a 15-second tapping session with camera/audio event matching, and a truthful results summary. “Holo” means a camera overlay, not a physical projection or reconstructed 3D desk.
 
-## 2. System Architecture & Directory Structure
+This is a rehabilitation-inspired prototype, not a validated medical device. Angles are model estimates; tap speed and acoustic amplitude do not establish nerve conduction, motor cortex speed, force, or a diagnosis. Remove the previous unsupported 70% adherence statistic, 2–3° accuracy implication, insurance guarantees, and HIPAA-compliance claim. Local processing is a privacy design decision, not proof of regulatory compliance. Event matching reduces some false positives but cannot prove physical contact.
+
+Priority order:
+
+- **P0:** build foundation, CV, geometry, air targets, desk calibration, audio/visual tapping, session results, and reliable demo operation using generic UI stubs.
+- **P1:** replace the stubs with a coherent presentation and rehearse the release. An AI draft report is optional, after the core works.
+- **P2:** ghost replay, bimanual targets, exploratory oscillation analysis; none blocks hackathon completion.
+
+[../roadmap.md](../roadmap.md) owns execution order and fresh-chat prompts. [features.md](features.md) owns scope; [pages.md](pages.md) owns presentation states. No official judging rubric was supplied; confirm it before adding track-specific requirements.
+
+## 2. Architecture and stack
+
+### 2.1 Decisions
+
+Use **Vite + React 19 + strict TypeScript**, HTML5 Canvas 2D, `@mediapipe/tasks-vision`, Web Audio `AudioWorklet`, Zod, and Vitest. Add Playwright for browser integration tests. Use plain semantic HTML and minimal CSS first; Tailwind, Lucide, and Recharts may be introduced during UI replacement only if useful. No Three.js, database, authentication, or server is required for P0. Vite is chosen because all required sensing and processing are local; Next.js server components and API routes add no value to that critical path.
+
+At scaffolding time select mutually compatible stable versions and a supported Node LTS satisfying Vite's requirements; pin Node, package versions, and the lockfile. Document exact versions rather than using runtime `@latest` URLs. Copy the WASM files from the installed MediaPipe package and a versioned hand model into local public assets with provenance, license, and checksum recorded. Missing assets must fail with an actionable setup error. Assets are build-time downloads, never runtime dependencies on a venue connection.
+
+MediaPipe configuration: `runningMode: "VIDEO"`, `numHands: 1` initially; 0.6 detection, presence, and tracking confidence are provisional configuration defaults. Try the GPU delegate, then explicitly report a CPU fallback if supported. Use `FilesetResolver.forVisionTasks('/mediapipe/wasm')` and a plain URL `/models/hand_landmarker.task`; the previous Markdown links embedded inside URL strings were invalid. No deprecated `@mediapipe/hands`.
+
+### 2.2 Modules and replaceable UI boundary
 
 ```text
 src/
-├── app/
-│   ├── page.tsx                  # Main split-screen Workstation + Clinical Dashboard
-│   └── api/
-│       └── clinical-soap/
-│           └── route.ts          # Zod-validated LLM endpoint for SOAP note & adaptive targets
-├── components/
-│   ├── canvas/
-│   │   ├── RehabViewport.tsx     # Webcam + 60FPS HTML5 Canvas overlay + Spatial Targets
-│   │   └── GhostHandRenderer.ts  # Pure canvas drawing utilities (skeleton, heat-shader, ghost hand)
-│   ├── dashboard/
-│   │   ├── LiveGoniometerHUD.tsx # Real-time joint angle gauges & cheat warning banner
-│   │   ├── TelemetryCharts.tsx   # Recharts: Baseline vs Current ROM & Tap Frequency Decay
-│   │   ├── SoapNotePanel.tsx     # Generated clinical report + CPT billing codes + adaptive prescription
-│   │   └── FactoryHudDrawer.tsx  # Observability HUD: FPS, latency, test suite status, token cost
-├── lib/
-│   ├── mediapipe.ts              # Singleton HandLandmarker WASM initializer
-│   ├── biomechanics.ts           # Pure 3D vector math, joint angles, palm calibration, wrist cheat detection
-│   ├── spatialTargets.ts         # Spatial button collider, dwell timer, bimanual mirroring transform
-│   ├── acousticTap.ts            # Web Audio API AnalyserNode + Visual Y-velocity cross-correlation
-│   ├── schemas.ts                # Zod schemas for telemetry, spatial targets, and SOAP reports
-│   └── __tests__/
-│       ├── biomechanics.test.ts  # Deterministic unit tests for 3D goniometry & cheat detection
-│       └── acousticTap.test.ts   # Unit tests for visual-acoustic cross-correlation gate
+  main.tsx
+  app/App.tsx                     # compositions, not sensing algorithms
+  components/stubs/               # disposable controls/status/results
+  components/workstation/         # added in the late UI phase
+  rendering/                      # canvas skeleton, targets, coordinate mapping
+  hooks/useSessionController.ts   # owns runtime; exposes commands + snapshots
+  engine/
+    sessionController.ts          # lifecycle/state orchestration
+    sessionReducer.ts             # deterministic transitions
+    telemetry.ts                  # aggregate measurements, no media
+  adapters/
+    camera.ts                     # stream ownership and frame timestamps
+    vision.ts                     # worker transport, bounded frame scheduling
+    audio.ts                      # graph lifecycle and clock mapping
+    replay.ts                     # labeled synthetic fixtures, same contracts
+  workers/handTracking.worker.ts
+  audio/tapProcessor.ts           # compiled worklet; no React dependencies
+  lib/
+    schemas.ts
+    biomechanics.ts
+    coordinates.ts
+    spatialTargets.ts
+    acousticTap.ts                 # pure DSP/event matching shared with tests
+    config.ts                     # named thresholds, units, rationale
+    __tests__/
+public/mediapipe/wasm/
+public/models/hand_landmarker.task
+fixtures/                         # synthetic timestamps/landmarks/events only
 ```
 
-### MediaPipe Initialization Contract (`src/lib/mediapipe.ts`)
-Use the official Google AI Edge CDN paths to avoid local WASM bundling issues:
-```typescript
-import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+Define a `FrameSample` with sequence ID, capture timestamp in the session monotonic clock, separate image/world landmark arrays, handedness metadata, and validity status. Define compact `AudioImpulse` events with sample-derived timestamp and RMS. A `SessionSnapshot` contains low-rate display data, target state, metrics, and diagnostics; commands include start devices, calibrate, start exercise, stop, reset, and dispose. UI components receive snapshots and callbacks; they never own algorithms or permission requests. Draw high-rate geometry from refs/buffers; publish snapshots at 10–15 Hz. A second stub view must be able to use the same controller without changing engine code.
 
-export async function createHandLandmarker(): Promise<HandLandmarker> {
-  const vision = await FilesetResolver.forVisionTasks(
-    "[https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm](https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm)"
-  );
-  return await HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "[https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task)",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numHands: 2,
-    minHandDetectionConfidence: 0.6,
-    minHandPresenceConfidence: 0.6,
-    minTrackingConfidence: 0.6,
-  });
-}
+### 2.3 Hardware lifecycle and performance
+
+- Request camera and microphone separately on user action so microphone denial does not cancel working CV. HTTPS or localhost is required. Resume audio from that gesture. In Vite this is client-only code; `"use client"` is only necessary if ported to Next.js.
+- Stop all media tracks, close AudioContext and HandLandmarker, disconnect nodes, terminate workers, cancel frame callbacks, remove listeners, and release ImageBitmaps on stop/unmount. Handle permission promises resolving after disposal and React Strict Mode remounts.
+- `detectForVideo` is synchronous. Isolate inference in a worker where the selected browser supports the pipeline; prove the exact bitmap/OffscreenCanvas/delegate combination early. Permit a measured, explicitly reported throttled main-thread fallback. Keep at most one frame in flight; drop excess frames, never queue indefinitely.
+- Capture each new video frame once, using `requestVideoFrameCallback` where supported, with a deduplicated `requestAnimationFrame` fallback. Preserve capture timestamps through worker results. Use monotonic increasing inference timestamps and reject stale sequence results.
+- Separate render FPS, inference FPS, inference duration, and capture-to-result age. **60 FPS rendering is a target, not a guarantee of 60 FPS inference.** Aim for at least 24 inference FPS and p95 result age <=120 ms on the documented demo laptop. These are demo gates to measure, not medical accuracy specifications. If missed, improve resolution/scheduling/delegate settings and remeasure; do not relabel interpolated frames as new inference.
+- No-hand is a normal state. Invalid math inputs throw at pure-function boundaries; the runtime catches specific errors, marks a sample invalid, and suspends scoring with a visible reason. It must not fabricate zero angles or repeatedly crash the frame loop. Reject nonfinite values. Track loss, device change, resize that invalidates desk placement, and tab suspension invalidate pending events and calibration as appropriate.
+
+## 3. Biomechanical math and coordinate contracts
+
+### 3.1 Landmarks and spaces
+
+Validate exactly 21 finite landmarks per present hand. Topology: wrist 0; thumb CMC/MCP/IP/tip 1–4; index MCP/PIP/DIP/tip 5–8; middle 9–12; ring 13–16; pinky 17–20. Image landmarks and world landmarks are different types and must never be interchangeable.
+
+- Use model **world landmarks** for within-hand 3D angles and relative lengths. Their estimated metric coordinates are centered on the hand and are not absolute desk/world positions. Wrist translation must be measured in image space; world wrist positions from separate frames are not an absolute trajectory.
+- Use image X/Y mapped into aspect-correct video pixels for collision, desk regions, and visual tap motion. Never mix normalized X/Y with world Z or use raw normalized X/Y distances on a nonsquare video.
+- For contain-fit video dimensions W,H and viewport Cw,Ch: s=min(Cw/W,Ch/H), ox=(Cw-sW)/2, oy=(Ch-sH)/2. Display X=ox+sW(1-x), Y=oy+sHy for the mirrored view. Inverse-map pointer placement through the same transform. Store targets in unmirrored source pixels or normalized source coordinates and render through that transform once. Canvas labels remain unmirrored. Set canvas backing size using devicePixelRatio without changing logical collision coordinates. Test letterboxing, resize, and both hands.
+
+### 3.2 Palm calibration
+
+Collect **three seconds of valid stable open-palm observations**, with enough samples at the measured frame rate (initial minimum 45). Restart the window on tracking loss or excessive variation. Use robust medians and report insufficient size, unstable pose, or occlusion rather than accepting bad data.
+
+Keep two scales: `palmWorld` = median ||world[9]-world[0]||, and `palmPixels` = median ||pixel[9]-pixel[0]||. The former normalizes within-hand ratios; the latter sizes on-screen targets. Both must be finite and nonzero. Small-image and stability thresholds are named pixel/ratio configuration values validated on hardware, not a universal `0.01` distance test. Freeze calibration during a trial; require recalibration after major camera/hand-distance change. This does not make targets perfectly invariant to perspective or distance.
+
+### 3.3 Joint angles
+
+For world points A,B,C, u=A-B and v=C-B. Reject lengths below an explicitly unit-bearing epsilon (initial 1e-6 m). Then:
+
+```text
+interiorDeg = acos(clamp(dot(u,v)/(length(u)*length(v)), -1, 1))*180/pi
+flexionDeg = 180 - interiorDeg
 ```
 
----
+Index PIP uses 5,6,7; DIP uses 6,7,8. 0,5,6 is an **MCP proxy**, since wrist-to-MCP is not a directly measured metacarpal bone axis. The formula gives an unsigned bend, not signed hyperextension. Label all readouts as estimates. Thumb-tip(4) to pinky-MCP(17) distance / palmWorld is a thumb reach ratio, **not a Kapandji score**. Core demo needs index PIP only; additional angles are optional.
 
-## 3. Biomechanical Math & 3D Goniometry Engine (`src/lib/biomechanics.ts`)
+Use time-based display smoothing `alpha=1-exp(-dt/tau)` with initial tau=80 ms, reset on gaps. Retain raw valid measurements separately; do not apply display lag to impulse timestamps. ROM is `maxFlexionDeg-minFlexionDeg`, not “maximum extension.” Compare sessions only for matching hand, exercise, calibration conditions, and sensor mode. An extension deficit decrease can be reported as baseline minimum flexion minus current minimum flexion, never invented when baseline is absent.
 
-### 3.1 MediaPipe 21 Hand Landmark Topology
-Every frame returns an array of 21 3D landmarks (`{ x, y, z }`). Precondition check: if `landmarks.length !== 21`, throw an explicit `InvalidLandmarkArrayError`.
-- `0`: WRIST
-- `1..4`: THUMB (`1`: CMC, `2`: MCP, `3`: IP, `4`: TIP)
-- `5..8`: INDEX (`5`: MCP, `6`: PIP, `7`: DIP, `8`: TIP)
-- `9..12`: MIDDLE (`9`: MCP, `10`: PIP, `11`: DIP, `12`: TIP)
-- `13..16`: RING (`13`: MCP, `14`: PIP, `15`: DIP, `16`: TIP)
-- `17..20`: PINKY (`17`: MCP, `18`: PIP, `19`: DIP, `20`: TIP)
+### 3.4 Palm orientation guard
 
-### 3.2 Anthropometric Hand Size Calibration (`PalmUnit`)
-To make spatial targets independent of camera distance or hand size:
-- Compute the Euclidean distance between `WRIST (0)` and `MIDDLE_MCP (9)`:
-  $$L_{\text{palm}} = \sqrt{(x_9 - x_0)^2 + (y_9 - y_0)^2 + (z_9 - z_0)^2}$$
-- Store $L_{\text{palm}}$ during the 3-second calibration phase as `1.0 PalmUnit`. If $L_{\text{palm}} \le 0.01$, throw a precondition error (`CalibrationError: Hand too far or invalid coordinates`).
+HandLandmarker has no forearm landmarks; it cannot directly measure anatomical wrist angle or detect every compensatory arm movement. Report a **palm orientation deviation proxy**.
 
-### 3.3 3D Joint Flexion/Extension Angle Formula
-Given three consecutive landmarks $A$ (proximal bone), $B$ (joint vertex), and $C$ (distal bone):
-1. Construct vectors originating from the vertex $B$:
-   $$\vec{u} = \langle A_x - B_x, A_y - B_y, A_z - B_z \rangle$$
-   $$\vec{v} = \langle C_x - B_x, C_y - B_y, C_z - B_z \rangle$$
-2. Calculate magnitudes $\Vert{}\vec{u}\Vert{}$ and $\Vert{}\vec{v}\Vert{}$. If either magnitude is less than $10^{-6}$, throw `ZeroLengthBoneVectorError`.
-3. Clamp the normalized dot product to $[-1, 1]$ to prevent `Math.acos` `NaN` errors from floating-point drift:
-   $$\cos\theta = \max\left(-1, \min\left(1, \frac{\vec{u} \cdot \vec{v}}{\Vert{}\vec{u}\Vert{} \Vert{}\vec{v}\Vert{}}\right)\right)$$
-4. Convert interior angle $\theta_{\text{int}} = \arccos(\cos\theta) \times \frac{180}{\pi}$ into clinical **Flexion Degrees** (where a straight extended finger is $0^\circ$ flexion and a bent knuckle is $90^\circ$ flexion):
-   $$\theta_{\text{flexion}} = 180^\circ - \theta_{\text{int}}$$
+From world landmarks, normalize a=(9-0); remove a's component from (17-5) and normalize the result b; n=normalize(cross(a,b)). Reject degenerate axes. Save baseline axes for the selected hand. Deviation is the maximum clamped acos angle between corresponding current/baseline axes. This catches longitudinal tilt and roll that the previous single-vector test missed. Require recalibration on hand switch.
 
-### 3.4 Key Clinical Angles Tracked
-- **Index PIP Flexion:** Vertex `6` (`Landmarks 5 -> 6 -> 7`)
-- **Index MCP Flexion:** Vertex `5` (`Landmarks 0 -> 5 -> 6`)
-- **Composite Finger Flexion:** Mean flexion across MCP, PIP, and DIP of the target finger.
-- **Kapandji Thumb Opposition Ratio:** Euclidean 3D distance between `THUMB_TIP (4)` and `PINKY_MCP (17)` divided by $L_{\text{palm}}$.
+Initial demo thresholds: lock at >18°, unlock below 14°; these are tunable interaction thresholds, not validated clinical cutoffs. Count one blocked attempt per continuous lockout during an active attempt, not once per frame. For air mode an attempt starts on entry, ends on exit/success/lockout, and requires exit before a new attempt. Expose attempts, blocked attempts, and lockout events separately. Desk mode uses its own stationary-wrist gate.
 
-### 3.5 Exponential Moving Average (EMA) Smoother
-Apply EMA smoothing ($\alpha = 0.35$) to computed angles so UI gauges remain rock-steady:
-$$S_t = \alpha \cdot Y_t + (1 - \alpha) \cdot S_{t-1}$$
+## 4. Spatial holo targets and session state
 
-### 3.6 Compensatory "Wrist Cheat" Detection Guardrail
-Patients with stiff finger joints unconsciously tilt or hike their wrist to reach spatial targets.
-- During calibration, record the baseline neutral unit vector of the palm axis $\vec{W}_{\text{base}}$ from `WRIST (0)` to `MIDDLE_MCP (9)`, and the lateral palm vector $\vec{P}_{\text{base}}$ from `INDEX_MCP (5)` to `PINKY_MCP (17)`.
-- On every frame during a finger-isolation exercise, compute the angular deviation $\Delta\theta_{\text{wrist}}$ between $\vec{W}_{\text{current}}$ and $\vec{W}_{\text{base}}$:
-  $$\Delta\theta_{\text{wrist}} = \arccos\left(\vec{W}_{\text{current}} \cdot \vec{W}_{\text{base}}\right) \times \frac{180}{\pi}$$
-- **Guardrail Rule:** If $\Delta\theta_{\text{wrist}} > 18^\circ$ while attempting to trigger a spatial finger target:
-  1. Flag `isWristCompensating = true`.
-  2. Lock spatial target progression (rep cannot be completed while cheating).
-  3. Render red warning vector on the wrist and increment `wristCheatCount`.
+### 4.1 Air mode
 
----
+Targets are **2D screen-space circles** with ID, offset from calibrated wrist in palmPixels, radius in palm units, `requiredLandmarkIndex` (8 for index), and dwellMs (initial 250). Anchor offsets in the calibrated image basis and translate with the current wrist; do not rotate targets to follow compensatory tilt. Collision distance and radius use the same source-pixel units. Require continuous valid in-target time and unlocked orientation; reset dwell on exit, lockout, tracking loss, or stale samples. Score once, then require release/exit before rearming. Target paths must stay on-screen and be reachable; targets alone do not prove isolated tendon movement.
 
-## 4. Spatial "Holo" Target Engine & Mechanics (`src/lib/spatialTargets.ts`)
+### 4.2 Desk mode: required holographic interaction
 
-### 4.1 Spatial Button Collider & Dwell Mechanic
-- Each spatial target is defined in normalized canvas coordinates:
-  `{ id: string, x: number, y: number, radiusPalmUnits: number, requiredFingerBookmark: number, dwellMs: number }`.
-- **Hit Detection:**
-  1. Calculate 2D canvas distance $d = \sqrt{(x_{\text{finger}} - x_{\text{target}})^2 + (y_{\text{finger}} - y_{\text{target}})^2}$.
-  2. Convert target radius to screen space: $R_{\text{screen}} = \text{radiusPalmUnits} \times L_{\text{palm}}$.
-  3. Check condition: $d \le R_{\text{screen}}$ AND `!isWristCompensating`.
-  4. **Dwell Timer:** The user must hold the fingertip inside the target ring for `dwellMs` (default `250ms`) to complete the rep. Draw a circular SVG/Canvas progress arc around the target ring as dwell time accumulates.
+Use an oblique camera view showing the fingertip's lift and return; a top-down view may hide vertical motion. The operator places a visible target ring on the imaged desk under the index finger. Collect a resting fingertip location plus 3–5 guided lifts/taps to estimate image-space motion direction, contact band, amplitude, timing offset, and wrist motion tolerance. Reject a setup with insufficient projected motion rather than pretending image Y is always vertical. Store calibration for that fixed camera/desk position. No metric plane reconstruction is implied.
 
-### 4.2 Exercise Mode 1: Spatial Tendon Gliding & ROM Arc (Air Mode)
-- Spawns a sequence of 3–4 holographic targets along an extension/opposition arc anchored relative to `WRIST (0)` so minor whole-arm drift doesn't misalign the exercise, while still requiring true finger extension and thumb opposition to hit the outer nodes.
+The core desk interaction is one ring that flashes and increments exactly once per accepted tap; moving between several desk pads is stretch scope. At contact, the fingertip must lie in the target region and calibrated contact band. Lift/release is required before the next score; a 250 ms dwell is **not** required for a tap. Show visual candidate, acoustic impulse, and fused acceptance distinctly in debug mode. No audio feedback while listening by default, to avoid triggering on the app's own sounds.
 
----
+### 4.3 State machines
 
-## 5. Vibro-Acoustic "Desk Tap" Sensor Fusion (`src/lib/acousticTap.ts`)
+Session: `idle -> requesting -> ready -> calibrating -> calibrated -> countdown -> running -> complete`; cancellation goes to ready/idle as resources dictate; faults enter recoverable error. A selected mode determines calibration and permissions. Reset clears timers, pending fusion events, counters, and calibration that is no longer valid. Hardware stop releases resources; restart is repeatable.
 
-### 5.1 Clinical Purpose
-Measures motor cortex speed, nerve conduction recovery, and muscular fatigue via a 15-second **Rapid Finger Tapping Test** on the physical table surface.
+A tap session uses a monotonic 15-second wall-clock interval. At tracking loss or hidden tab, abort and mark the trial incomplete; require a fresh countdown rather than silently extending the trial or counting hidden taps. Late-delivered events may complete matching after the end only if their capture times were within the trial and its bounded matching grace period. Aborted trials have no comparable early/late rate change.
 
-### 5.2 Dual-Sensor Cross-Correlation Algorithm (Anti-Noise Architecture)
-Hackathon venues are noisy. Relying on the microphone alone triggers false taps from voices; relying on the webcam alone cannot measure impact intensity or exact surface contact.
-1. **Visual Kinematic Gate (Webcam):**
-   - Track vertical velocity $v_y(t) = \frac{y_8(t) - y_8(t - \Delta t)}{\Delta t}$ of `INDEX_TIP (8)`.
-   - Detect a downward strike trajectory followed by a visual floor inflection point (where `INDEX_TIP` reaches local maximum $y$ near the desk plane and $\lvert v_y(t) \rvert$ drops toward zero) while `WRIST (0)` remains stationary ($\lvert v_{y,0} \rvert < \epsilon$).
-   - Open a **`80ms` Visual Strike Window** (`visualStrikeWindowOpenUntil = performance.now() + 80`).
-2. **Acoustic Impulse Detector (Web Audio API):**
-   - Initialize `AudioContext` and `AnalyserNode` (`fftSize = 512`, `smoothingTimeConstant = 0.1`).
-   - Compute instantaneous Root Mean Square (RMS) energy from time-domain PCM samples $s_i \in [-1, 1]$:
-     $$\text{RMS}(t) = \sqrt{\frac{1}{N}\sum_{i=1}^{N} s_i^2}$$
-   - Maintain a rolling background noise floor $\mu_{\text{noise}}$ (EMA with $\alpha = 0.02$).
-   - Detect an acoustic impulse peak when $\text{RMS}(t) > \max(0.04, 3.0 \times \mu_{\text{noise}})$ with a refractory cooldown of `90ms` between taps.
-3. **Sensor Fusion Verification:**
-   - A tap is recorded as a **Verified Vibro-Acoustic Tap** if and only if an Acoustic Impulse Peak occurs while `performance.now() <= visualStrikeWindowOpenUntil` (or within $\pm 45\text{ms}$ of visual nadir).
-   - If the microphone permission is denied or unavailable, fail gracefully to **Kinematic-Only Tap Mode** with an explicit status badge in the UI.
+## 5. Vibro-acoustic desk tap fusion
 
-### 5.3 Extracted Desk-Tap Telemetry Metrics
-- **Tap Frequency (Hz):** Total verified taps divided by duration (`15s`).
-- **Fatigue Decay Index (%):** Percentage change in tap frequency between the first 5 seconds ($f_{0\text{--}5}$) and the final 5 seconds ($f_{10\text{--}15}$):
-  $$\text{FatigueDecay} = \left(\frac{f_{10\text{--}15} - f_{0\text{--}5}}{f_{0\text{--}5}}\right) \times 100$$
-- **Impact Intensity Consistency:** Mean and normalized standard deviation of peak acoustic RMS values across all verified taps.
-- **Rhythm Jitter (ms):** Standard deviation of inter-tap intervals ($\Delta t_k = t_k - t_{k-1}$).
+### 5.1 Pure visual detector
 
----
+Let p(t) be the fingertip pixel position and d the calibrated unit lift-to-contact direction. Use q(t)=dot(p(t)-rest,d)/palmPixels and capture-time velocity `(q(t)-q(t-1))/dt`, not callback arrival time. Use a `lifted -> descending -> contactCandidate -> released` state machine with hysteresis, a contact band, minimum excursion, valid target overlap, and bounded image-space wrist speed (palm units/s). Timestamp a candidate at the observed contact extremum; lookahead confirmation may arrive later. Named thresholds come from calibration/configuration, not arbitrary multipliers hidden in rendering. Gaps, invalid samples, lockouts, and session changes clear candidates.
 
-## 6. Data Schemas & AI Clinical Pipeline (`src/lib/schemas.ts`)
+### 5.2 Audio detector
 
-All communication between the client telemetry engine and the AI Clinical SOAP Generator MUST pass through these exact `zod` schemas:
+Request microphone with echo cancellation, noise suppression, and auto gain control disabled where supported; inspect actual settings, since constraints are not guarantees. Capture locally with `AudioWorklet`. Process actual block lengths/sample rates, aggregate rolling ~10 ms windows, and emit compact impulse events plus a throttled level meter. Never send PCM through React, persist audio, or upload it. AnalyserNode may drive a decorative meter, but polling its latest 512 samples once per video frame misses audio between polls. Its `smoothingTimeConstant` is not a time-domain RMS smoothing algorithm.
 
-```typescript
-import { z } from "zod";
+RMS = sqrt(sum(samples squared)/N). Calibrate background during a quiet interval; initial threshold `max(0.04,3*noiseRms)` and 90 ms refractory period are provisional defaults. Use onset/peak hysteresis and freeze background adaptation during impulses; time-based noise adaptation and a calibrated threshold should handle microphone differences. Record sample-derived onset/peak times consistently and use one convention throughout fusion. Missing/clipped input or unworkable noise floor is a visible calibration failure. Keep audio output silent.
 
-export const SessionTelemetrySchema = z.object({
-  sessionId: z.string(),
-  exerciseType: z.enum(["SPATIAL_ROM_ARC", "VIBRO_ACOUSTIC_DESK_TAP", "THUMB_OPPOSITION"]),
-  durationSeconds: z.number().positive(),
-  palmUnitBaseline: z.number().positive(),
-  romMetrics: z.object({
-    maxIndexPipExtensionDeg: z.number(),
-    meanFlexionAngleDeg: z.number(),
-    baselineMaxExtensionDeg: z.number(),
-    improvementDeltaDeg: z.number(),
-  }),
-  tapMetrics: z.object({
-    totalVerifiedTaps: z.number().int().nonnegative(),
-    frequencyHz: z.number().nonnegative(),
-    earlyWindowHz: z.number().nonnegative(),
-    lateWindowHz: z.number().nonnegative(),
-    fatigueDecayPct: z.number(),
-    meanAcousticRms: z.number().nonnegative(),
-    rhythmJitterMs: z.number().nonnegative(),
-  }).optional(),
-  qualityGuardrails: z.object({
-    totalAttempts: z.number().int().nonnegative(),
-    wristCheatCount: z.number().int().nonnegative(),
-    maxWristDeviationDeg: z.number().nonnegative(),
-    compensationRatePct: z.number().min(0).max(100),
-  }),
-});
+### 5.3 Shared time and symmetric matching
 
-export const ClinicalSoapResponseSchema = z.object({
-  soapNote: z.object({
-    subjective: z.string(),
-    objective: z.string(),
-    assessment: z.string(),
-    plan: z.string(),
-  }),
-  cptCodes: z.array(
-    z.object({
-      code: z.enum(["97110", "97530", "98977"]),
-      description: z.string(),
-      clinicalJustification: z.string(),
-    })
-  ),
-  adaptivePrescription: z.object({
-    difficultyMultiplier: z.number().min(0.8).max(1.25),
-    coachingCue: z.string(),
-    nextSpatialTargets: z.array(
-      z.object({
-        id: z.string(),
-        offsetXPalmUnits: z.number(),
-        offsetYPalmUnits: z.number(),
-        radiusPalmUnits: z.number(),
-        dwellMs: z.number(),
-      })
-    ),
-  }),
-});
-```
+Map audio sample time (`currentFrame/sampleRate`) into the session performance clock using an explicit clock anchor; resynchronize after suspension and invalidate old buffers. Video uses capture timestamps in that same clock, not inference completion times. During guided calibration estimate the audio-minus-visual contact offset using unambiguous spaced pairs; persist its value and residual spread. Reject excessive residual uncertainty. Browser/device latency means sub-frame physical timing is not guaranteed.
 
----
+Maintain bounded queues of unmatched visual and audio events. Correct audio timestamps by the calibrated offset, then match nearest unmatched events with absolute time difference <=80 ms (initial configurable tolerance). Match whether audio or visual arrives first. Allow up to 250 ms delivery lateness initially, flush unmatched events thereafter, and invalidate stale results beyond that budget. Tolerance and delivery budget have distinct roles. Each event can be consumed once, and each visual release/contact cycle can yield at most one tap. Unit-test tie-breaking, boundary inclusion, out-of-order delivery, duplicates, cooldown, and events crossing trial boundaries. This is temporal coincidence matching, not mathematical waveform cross-correlation.
 
-## 7. Prioritized Build Roadmap & Stretch Mechanics
+If audio is unavailable, explicitly select `kinematic_only`; count visual taps separately, never as verified taps. A mode change during a trial aborts it. Replay is a separate data source, always labeled. Neither fallback satisfies the live fused-demo acceptance gate.
 
-### P0 — Core Vision, Math & Spatial Targets (Complete First)
-1. `src/lib/biomechanics.ts` + `src/lib/__tests__/biomechanics.test.ts` (100% passing unit tests for `calculateJointAngle3D`, `computePalmUnit`, and `detectWristCompensation`).
-2. `RehabViewport.tsx`: 60 FPS webcam + canvas skeleton renderer + Tendon Tension Heat Shader (interpolating bone segment stroke color from `#3b82f6` blue -> `#10b981` green -> `#ef4444` red based on joint angle and wrist compensation).
-3. Spatial target loop with dwell progress arcs and real-time red lockouts when `isWristCompensating === true`.
+### 5.4 Metrics
 
-### P1 — Vibro-Acoustic Desk Tap + AI Clinical SOAP Pipeline (Complete Second)
-1. `src/lib/acousticTap.ts` + `src/lib/__tests__/acousticTap.test.ts` (unit-tested visual + audio spike cross-correlation).
-2. Live waveform/impulse bar at the bottom of the viewport during Desk Tap mode + live Hz / Fatigue Decay counters.
-3. `/api/clinical-soap/route.ts` + `SoapNotePanel.tsx` + `TelemetryCharts.tsx` comparing current session against a stored baseline profile.
-4. `FactoryHudDrawer.tsx`: Bottom bar displaying live FPS, frame inference time (`ms`), Zero-Video-Egress security badge, and unit test verification status.
+For a completed 15-second trial, accepted count / 15 is frequencyHz; early and late counts use capture times in [0,5) and [10,15), divided by 5. `rateChangePct=100*(lateHz-earlyHz)/earlyHz`, null when earlyHz=0 or trial incomplete. Negative means slower; do not label it diagnosed fatigue.
 
-### P2 — High-Impact Creative Stretch Mechanics (Implement Once P0 & P1 Pass)
-1. **"Ghost Hand" Baseline Replay Overlay (`GhostHandRenderer.ts`):**
-   - Store a 10-second ring buffer of normalized 21-point landmarks (`Landmark[][]`) from the baseline session in `localStorage`.
-   - During active exercises, render the baseline recording at the corresponding timestamp as a translucent cyan wireframe (`rgba(6, 182, 212, 0.35)`) anchored to the user's current `WRIST (0)` position so the user visually races and stretches past their own historical "Ghost Hand."
-2. **Bimanual "Healthy Hand Mirroring" Auto-Calibration:**
-   - User holds up their healthy hand for 5 seconds and performs a full stretch.
-   - Capture peak landmark positions relative to `WRIST (0)`, mirror across the X-axis ($\Delta x' = -\Delta x$), and automatically spawn the injured hand's spatial targets at those exact anatomical coordinates.
-3. **Postural Nerve Tremor Micro-Oscillation Analyzer:**
-   - 5-second "Hold Still in the Ring" mode that measures positional variance and $4\text{--}12\text{ Hz}$ jitter of `INDEX_TIP (8)` in millimeters (normalized via `PalmUnit`) to quantify resting/postural tremor.
+Report population SD of inter-tap intervals only with at least two intervals (three taps), otherwise null. Acoustic mean and coefficient of variation are relative microphone amplitude statistics for matched taps, not impact force; null without suitable audio or when the mean is zero. Empty means/ROM extrema and missing baselines are null, never dummy zero. Verified counts apply only to fused mode; kinematic counts remain distinct. Include rejected candidates and tracking coverage for debugging, without treating false-negative estimates as ground truth.
+
+## 6. Data contracts, privacy, and optional reporting
+
+Implement strict Zod schemas as the single source of truth; infer TS types. This table replaces the original incompatible required-ROM schema. Validate nested objects strictly, finite numbers, integer counts, bounds, relationships, and size limits; version the schema from the start.
+
+| Contract | Required content and invariants |
+| --- | --- |
+| FrameSample (local only) | sequence; captureTimeMs; image/world arrays of 21 finite points or explicit absent/invalid state; selected hand; no dummy arrays |
+| Calibration (local only) | hand; video dimensions; median palm scales; palm basis; mode; desk region/direction/contact band and audio offset for fused desk mode; configuration revision |
+| SessionTelemetrySchema | schemaVersion=1; random sessionId (not a user ID); source=`live` or `synthetic_replay`; exercise=`air_targets` or `desk_tap`; sensorMode=`vision_only`, `fused`, or `kinematic_only`; status=`completed` or `aborted`; finite durationSeconds>0; quality; exercise-specific metrics |
+| Quality | valid/total frame counts; coverage in [0,1]; attempts, blocked attempts<=attempts; lockout events; max palm deviation in [0,180] or null; compensation percentage null with zero attempts |
+| Air metrics | completed reps; min/max/mean PIP flexion in [0,180] or null; ROM range or null; baseline comparison nullable; no tap metrics |
+| Desk metrics | acceptedTapCount; verifiedTapCount; kinematicTapCount; frequencyHz; earlyHz/lateHz nullable for aborts; rateChangePct nullable; rhythmJitterMs nullable; meanAcousticRms and acousticCv nullable; no mandatory ROM metrics |
+| Report draft (optional) | source=`template` or `llm`; disclaimer; bounded subjective/objective/assessment/plan strings; no billing codes or automatic exercise prescription |
+
+Use a discriminated union by exercise and refinements by mode/status. Air requires vision_only. In fused desk mode accepted=verified and kinematic=0; in kinematic mode accepted=kinematic and verified=0, with acoustic fields null. Derived rates/counts must reconcile, max>=min, and min/max/mean/range must have consistent nullability. Define exported schema limits and test hostile/oversized payloads. Local arrays never belong in report requests.
+
+The required result is a deterministic local summary and downloadable validated JSON. Baselines are opt-in local summary records with version, clear/reset controls, and compatibility checks; no raw media is stored. Landmarks and event buffers are bounded and memory-only by default. No analytics, remote error logs containing sensor data, WebRTC transmission, or frame/audio upload. Aggregate telemetry is minimized and identifier-free but is not guaranteed anonymous merely because it is JSON.
+
+Optional AI reporting comes after P0 and UI: Vite does not provide API routes, so add an explicit small same-origin server/serverless adapter only if that phase is chosen. Keep keys server-side, never in `VITE_*`; use request size/rate/time limits, input and output validation, and an explicit send-summary action. Network failure/refusal/invalid output keeps the local report usable. The LLM may draft text from observed metrics but must not invent symptoms, diagnoses, billing eligibility, or treatment plans. Mark missing subjective information as not collected. No automatic target changes based on LLM output. Schema-valid output can still be false and must remain an unreviewed draft.
+
+## 7. Stretch mechanics (P2 only)
+
+- **Ghost hand:** bounded timestamped landmark replay in memory; optional deliberate IndexedDB export with retention/clear controls. Align wrist, palm scale, orientation, and elapsed time. Do not write frame streams to synchronous localStorage.
+- **Bimanual mirroring:** a reflected palm-local coordinate basis plus explicit handedness and calibration. Screen `x -> -x` alone does not recover matching anatomical motion. User-adjusted comfortable targets, no inferred prescription.
+- **Oscillation visualization:** measured sampling rate, detrending, uniform resampling, anti-aliasing, and tracking-noise characterization precede spectral analysis. A 4–12 Hz band needs reliable sampling above 24 Hz with margin. Reject inadequate data. Use pixels/palm units, not claimed submillimeters or diagnosis.
+
+## 8. Verification and demo release gates
+
+Every implementation phase runs typecheck, deterministic tests, and production build. Math/DSP tests must pass before live wiring. Browser tests cover replay workflow, denied devices, reset/dispose, mirrored coordinates, and invalid data. They do not validate camera accuracy or real microphone timing.
+
+On the intended laptop/browser/camera/desk, record versions and results: 60-second stable tracking; three complete 15-second fused sessions; deliberate taps vs accepted count; speech/claps without finger motion; silent hover/lift without desk contact; duplicate suppression; hand loss; microphone denial; repeated start/stop; local production assets with internet unavailable. Initial demo target is >=18 accepted out of 20 deliberate taps and <=1 false acceptance in 20 deliberate noise/no-contact trials, each recorded with the test setup. These are small demo checks, not clinical validation. Failure blocks the fused-demo claim and requires tuning/retest or an explicit unresolved limitation.
+
+Rehearse a 60-second walkthrough: start and calibrate, show live skeleton/PIP estimate, activate an air target, run 15-second desk taps, explain fused evidence, view summary, reset. Keep a labeled synthetic replay for presentation continuity and testing; it never replaces evidence that real CV and desk tapping work. UI test-status badges must identify a real build/test record, not be hardcoded green.
+
+## 9. References and audit notes
+
+Technical references checked 2026-11-07:
+
+- [Google Hand Landmarker guide](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker?tab=Web): image/world outputs and setup.
+- [HandLandmarker API](https://developers.google.com/edge/api/mediapipe/js/tasks-vision.handlandmarker): synchronous video inference.
+- [AudioWorklet process](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor/process) and [sample clock](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletGlobalScope/currentFrame): audio-thread processing and timestamps.
+- [getUserMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia): permissions and secure contexts.
+- [Vite guide](https://vite.dev/guide/): frontend build setup; check current Node requirements when scaffolding.
+
+Thresholds, architecture choices, calibration procedures, and acceptance budgets above are project engineering decisions to validate, not claims established by these sources. Major corrections from the initial specification: valid local asset URLs; one selected stack; separate image/world units; aspect-correct mirroring; honest angle/proxy labels; event-based lockout counts; desk-first P0; continuous audio capture; symmetric clock-aligned fusion; null-safe metrics; no unsupported clinical/billing claims; and UI after functional proof.

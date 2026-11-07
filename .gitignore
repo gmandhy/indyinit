@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.local
+public/mediapipe/wasm/*
+public/models/*
+!public/mediapipe/wasm/.gitkeep
+!public/models/.gitkeep

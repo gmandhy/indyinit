@@ -1,0 +1,7 @@
+:root { font-family: system-ui, sans-serif; color: #18232c; background: #fff; }
+body { margin: 0; } main { max-width: 1000px; padding: 1rem; margin: auto; }
+section, details { border: 1px solid #aaa; margin: 1rem 0; padding: .75rem; }
+h2 { font-size: 1.15rem; margin-top: 0; } button, select { padding: .45rem; margin: .25rem; font: inherit; }
+canvas { display: block; width: 100%; max-width: 640px; height: auto; aspect-ratio: 16 / 9; background: #eee; }
+.compact { display: flex; gap: 1rem; flex-wrap: wrap; } .compact > div { flex: 1 1 300px; min-width: 0; }
+:focus-visible { outline: 3px solid #165dc0; outline-offset: 2px; } dd { margin-bottom: .5rem; }
