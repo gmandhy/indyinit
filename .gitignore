@@ -6,3 +6,6 @@ public/mediapipe/wasm/*
 public/models/*
 !public/mediapipe/wasm/.gitkeep
 !public/models/.gitkeep
+
+playwright-report/
+test-results/

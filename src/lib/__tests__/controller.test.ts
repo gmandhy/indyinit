@@ -31,7 +31,7 @@ describe('controller/replay engine boundary without React or devices',()=>{
     expect(m.c.getSnapshot().diagnostics.replayFrames).toBe(1);
     m.c.selectExercise({exercise:'desk_tap',sensorMode:'kinematic_only'});m.frame(50,1);
     expect(m.c.getSnapshot()).toMatchObject({phase:'ready',selection:{exercise:'desk_tap',sensorMode:'kinematic_only'},diagnostics:{replayFrames:0},calibration:null});
-    expect(m.c.frameBuffer.current).toBeNull();m.c.calibrate();expect(m.c.getSnapshot().calibrationStatus).toBe('unavailable');
+    expect(m.c.frameBuffer.current).toBeNull();m.c.calibrate();expect(m.c.getSnapshot().calibrationStatus).toBe('collecting');
     m.c.stop();expect(m.c.getSnapshot().phase).toBe('idle');m.c.dispose();m.c.dispose();expect(m.adapter.dispose).toHaveBeenCalledTimes(1);
   });
   it('ignores late initialization after stop/dispose',async()=>{

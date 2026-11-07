@@ -16,10 +16,10 @@ export function drawReplayPreview(context:CanvasRenderingContext2D,buffer:FrameB
   // presentation highlight duration never changes candidate eligibility.
   const desk=buffer.desk;
   if(desk?.region){
-    const p=sourceToDisplay(desk.region.center,fit),recent=nowMs!==undefined&&desk.lastCandidate!==null&&nowMs-desk.lastCandidate.observedAtMs>=0&&nowMs-desk.lastCandidate.observedAtMs<=TARGET_FEEDBACK_CONFIG.candidateHighlightMs;
+    const p=sourceToDisplay(desk.region.center,fit),recent=nowMs!==undefined&&desk.lastAccepted!==null&&nowMs-desk.lastAccepted.atMs>=0&&nowMs-desk.lastAccepted.atMs<=TARGET_FEEDBACK_CONFIG.candidateHighlightMs;
     context.lineWidth=recent?4:2;context.strokeStyle=recent?'#087f5b':desk.visual?.phase==='contactCandidate'?'#a60':'#165dc0';
     context.beginPath();context.arc(p.x,p.y,desk.region.radiusPixels*fit.scale,0,Math.PI*2);context.stroke();
-    context.fillStyle='#165dc0';context.fillText(recent?'Visual candidate':`Desk ring: ${desk.visual?.phase??'setup'}`,fit.ox+8,fit.oy+36);
+    context.fillStyle='#165dc0';context.fillText(recent?(desk.lastAccepted?.mode==='fused'?'Accepted fused coincidence':'Accepted kinematic tap'):`Desk ring: ${desk.visual?.phase??'setup'}`,fit.ox+8,fit.oy+36);
   }
   if(sample?.validity!=='valid'||(nowMs!==undefined&&nowMs-sample.captureTimeMs>FRAME_CONFIG.maxAgeMs))return;
   context.strokeStyle=media?'#00ffff':'#123';context.lineWidth=2;

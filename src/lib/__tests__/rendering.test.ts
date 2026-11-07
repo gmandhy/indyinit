@@ -25,11 +25,12 @@ describe('live skeleton/video presentation',()=>{
     drawReplayPreview(ctx,{current:{sequence:1,captureTimeMs:140,selectedHand:'Right',validity:'absent',reason:'no_hand'},media}, {width:640,height:360},145);
     expect(ctx.drawImage).toHaveBeenCalledTimes(2);expect(ctx.arc).not.toHaveBeenCalled();
   });
-  it('draws the placed desk ring with no hand and highlights an emitted candidate without changing it',()=>{
-    const ctx=context(),desk={region:{center:sourcePixel(250,200),radiusPixels:25},visual:null,lastCandidate:{sequence:1,cycle:1,captureTimeMs:50,observedAtMs:80}},video={width:640,height:480},viewport={width:800,height:400};
+  it('draws the placed desk ring with no hand and highlights only an accepted tap without changing it',()=>{
+    const ctx=context(),desk={region:{center:sourcePixel(250,200),radiusPixels:25},visual:null,lastAccepted:{atMs:80,mode:'fused' as const},lastCandidate:{sequence:1,cycle:1,captureTimeMs:50,observedAtMs:80}},video={width:640,height:480},viewport={width:800,height:400};
     const before=JSON.stringify(desk);drawReplayPreview(ctx,{current:null,desk,video},viewport,100);
     const fit=containFit(video,viewport),p=sourceToDisplay(desk.region.center,fit);
-    expect(ctx.arc).toHaveBeenCalledExactlyOnceWith(p.x,p.y,25*fit.scale,0,Math.PI*2);expect(ctx.fillText).toHaveBeenCalledWith('Visual candidate',fit.ox+8,fit.oy+36);
+    expect(ctx.arc).toHaveBeenCalledExactlyOnceWith(p.x,p.y,25*fit.scale,0,Math.PI*2);expect(ctx.fillText).toHaveBeenCalledWith('Accepted fused coincidence',fit.ox+8,fit.oy+36);
     drawReplayPreview(ctx,{current:null,desk,video},viewport,300);expect(JSON.stringify(desk)).toBe(before);
+    drawReplayPreview(ctx,{current:null,desk:{...desk,lastAccepted:null},video},viewport,100);expect(ctx.fillText).toHaveBeenLastCalledWith('Desk ring: setup',fit.ox+8,fit.oy+36);
   });
 });

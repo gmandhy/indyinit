@@ -33,7 +33,7 @@ describe('audio / visual controller orchestration (artificial devices only)',()=
   it.each(['audio','visual'] as const)('fuses %s-first exactly once; keeps counts distinct and rejects delayed callbacks after reset',async order=>{
     const h=fixture();await h.calibrated();h.countdown();h.frame(30);h.frame(15);h.frame();const contact=h.now();
     h.setTime(contact+25);if(order==='audio')h.impulse(contact+25,10);h.frame();if(order==='visual')h.impulse(contact+25,10);
-    expect(h.c.getSnapshot()).toMatchObject({phase:'running',metrics:{acceptedCount:null},fusion:{visualCount:1,audioCount:1,fusedCount:1,lastFused:{deltaMs:0}},desk:{visualCandidateCount:1}});
+    expect(h.c.getSnapshot()).toMatchObject({phase:'running',metrics:{acceptedCount:null},fusion:{visualCount:1,audioCount:1,fusedCount:1,lastFused:{deltaMs:0}},desk:{visualCandidateCount:1,acceptedTapCount:1,lastAccepted:{mode:'fused'}}});
     h.impulse(contact+25,10);for(let i=0;i<5;i++)h.frame();expect(h.c.getSnapshot().fusion.fusedCount).toBe(1);
     h.c.reset();h.impulse(contact+25,11);expect(h.c.getSnapshot()).toMatchObject({phase:'idle',calibration:null,fusion:{fusedCount:0}});expect(h.audio.stop).toHaveBeenCalled();h.c.dispose();expect(h.audio.dispose).toHaveBeenCalled();
   });
@@ -49,6 +49,17 @@ describe('audio / visual controller orchestration (artificial devices only)',()=
     for(let i=0;i<3;i++)h.pair();h.c.finishTimingCalibration();h.countdown();
     for(let i=0;i<40;i++)h.impulse(h.now(),100+i);expect(h.c.getSnapshot().fusion.trace.length).toBe(32);
     h.c.setHidden(true);expect(h.c.getSnapshot()).toMatchObject({phase:'ready',calibration:null,fusion:{trace:[]}});expect(h.audio.stop).toHaveBeenCalled();h.c.dispose();
+  });
+  it('settles capture-eligible late matches into immutable results and excludes the exact deadline',async()=>{
+    const h=fixture();await h.calibrated();h.countdown();const start=h.now();
+    while(h.now()<start+14800)h.frame();h.frame(30);h.frame(15);h.frame();const contact=h.now();h.frame();
+    expect(contact).toBe(start+14950);expect(h.c.getSnapshot().desk?.acceptedTapCount).toBe(0);
+    h.setTime(start+15100);h.impulse(contact+25,999);h.c.tick();
+    expect(h.c.getSnapshot()).toMatchObject({phase:'complete',result:null,desk:{acceptedTapCount:1,lastAccepted:{atMs:start+15100}}});
+    h.setTime(start+15250);h.c.tick();expect(h.c.getSnapshot().result).toBeNull();
+    h.setTime(start+15251);h.c.tick();const result=h.c.getSnapshot().result;
+    expect(result).toMatchObject({status:'completed',durationSeconds:15,metrics:{acceptedTapCount:1,verifiedTapCount:1,earlyHz:0,lateHz:.2,rateChangePct:null}});
+    h.impulse(start+15000,1000);h.c.tick();expect(h.c.getSnapshot().result).toEqual(result);h.c.dispose();
   });
   it('runs labeled replay diagnostics through the same matcher in both orders without contributing to air reps',async()=>{
     vi.useFakeTimers();try{

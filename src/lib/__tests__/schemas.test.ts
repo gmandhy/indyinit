@@ -79,7 +79,7 @@ describe('local sensor boundaries', () => {
     const deskCalibration = { ...calibration, exercise:'desk_tap', sensorMode:'fused', desk:{region:{center:{x:200,y:200},radiusPixels:30},rest:{x:200,y:200},wristRest:{x:200,y:250},contactDirection:{x:0,y:1},contactBand:{minPalmUnits:-.1,maxPalmUnits:.1},excursionPalmUnits:.2,wristTolerancePalmUnitsPerSecond:1},audio:{offsetMs:20,residualSpreadMs:10} };
     expect(CalibrationSchema.safeParse(deskCalibration).success).toBe(true);
     expect(CalibrationSchema.safeParse({...deskCalibration,audio:undefined}).success).toBe(false);
-    expect(CalibrationSchema.safeParse({...deskCalibration,audio:{offsetMs:0,residualSpreadMs:100}}).success).toBe(false);
+    expect(CalibrationSchema.safeParse({...deskCalibration,audio:{offsetMs:0,residualSpreadMs:41}}).success).toBe(false);
     expect(CalibrationSchema.safeParse({...deskCalibration,desk:{...deskCalibration.desk,contactDirection:{x:0,y:0}}}).success).toBe(false);
     expect(CalibrationSchema.safeParse({...deskCalibration,desk:{...deskCalibration.desk,rest:{x:900,y:0}}}).success).toBe(false);
   });

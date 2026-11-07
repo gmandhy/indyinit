@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LIMITS } from './config';
+import { FUSION_CONFIG, LIMITS } from './config';
 const finite = z.number().finite();
 const nonnegative = finite.nonnegative();
 const positive = finite.positive();
@@ -40,7 +40,7 @@ const calibrationBase = { imageBasis, hand, video: z.strictObject({ width: z.num
 export const CalibrationSchema = z.discriminatedUnion('sensorMode', [
   z.strictObject({ ...calibrationBase, exercise: z.literal('air_targets'), sensorMode: z.literal('vision_only') }),
   z.strictObject({ ...calibrationBase, exercise: z.literal('desk_tap'), sensorMode: z.literal('kinematic_only'), desk }),
-  z.strictObject({ ...calibrationBase, exercise: z.literal('desk_tap'), sensorMode: z.literal('fused'), desk, audio: z.strictObject({ offsetMs: finite.min(-1000).max(1000), residualSpreadMs: nonnegative.max(80) }) }),
+  z.strictObject({ ...calibrationBase, exercise: z.literal('desk_tap'), sensorMode: z.literal('fused'), desk, audio: z.strictObject({ offsetMs: finite.min(-1000).max(1000), residualSpreadMs: nonnegative.max(FUSION_CONFIG.maxResidualMs) }) }),
 ]).refine(c => {
   if(c.sensorMode==='vision_only')return true;
   const {region:r,rest,wristRest:w,contactBand:b}=c.desk;

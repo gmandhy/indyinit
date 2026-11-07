@@ -23,7 +23,7 @@ export function createAcousticDetector(sampleRate:number, overrides:Partial<{[K 
       if(!Number.isSafeInteger(firstFrame)||firstFrame<0||samples.length===0)throw new MathInputError('Nonempty samples and nonnegative integer frame required');
       // Validate whole block before mutating state.
       for(const v of samples){finite(v,'PCM');if(Math.abs(v)>1)throw new MathInputError('PCM outside full scale');}
-      if(nextFrame!==null&&firstFrame!==nextFrame)throw new MathInputError('Discontinuous audio sample clock; reset required');
+      if(nextFrame!==null&&firstFrame!==nextFrame)throw new MathInputError(`Discontinuous audio sample clock: expected frame ${nextFrame}, received ${firstFrame}, block ${samples.length}; reset required`);
       if(nextFrame===null)startFrame=firstFrame;
       nextFrame=firstFrame+samples.length;
       const events:AudioImpulse[]=[];
