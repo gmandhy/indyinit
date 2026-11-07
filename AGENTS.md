@@ -1,6 +1,6 @@
-# AGENTS.md — HoloRehab Operational Protocol
+# AGENTS.md ITap Operational Protocol
 
-## 1. Project Identity
+## 1. ITap Identity
 **HoloRehab** is a browser-native, clinical-grade spatial and vibro-acoustic hand physical therapy workstation. It fuses 60 FPS 3D computer vision (`@mediapipe/tasks-vision`), trigonometric goniometry, and Web Audio API desk-tap impulse detection to track range of motion (ROM), block compensatory wrist cheating, and generate insurance-ready clinical SOAP notes.
 
 Read `@design.md` (or `design.md`) for full mathematical formulas, landmark indices, state machines, and Zod schemas before implementing any feature.
