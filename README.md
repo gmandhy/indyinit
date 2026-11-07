@@ -1,6 +1,6 @@
 # ITap
 
-Browser-native, rehabilitation-inspired hackathon prototype. **Phase 5 adds local acoustic capture, guided timing calibration and temporal coincidence matching** to the local camera/worker harness. Software checks pass; phase 3–5 hardware acceptance remains pending, including the observed straight-pose palm-calibration rejection. See the progress record. This is not a validated clinical device. No backend, account, API key, or UI library is required.
+Browser-native, rehabilitation-inspired hackathon prototype. **Phase 6 provides setup, calibration, countdown, a fixed 15-second trial, local results, validated JSON export, and reset** for air and desk modes. Live acceptance remains pending, including the observed straight-pose palm-calibration rejection and the three-session/tap/noise gates. See the progress record. This is not a validated clinical device. No backend, account, API key, or UI library is required.
 
 ## Setup
 
@@ -26,6 +26,7 @@ npm run dev
 | `npm run preview` | Serve the production build locally |
 | `npm run assets:prepare` | Copy matching installed WASM assets and fetch versioned model/license; verify every checksum |
 | `npm run assets:verify` | Offline checksum and package-version verification; fails on missing/corrupt assets |
+| `npm run test:e2e` | Playwright workflows against a production build; run build first |
 
 Versions: React/React DOM 19.3.1, Vite 8.3.6, TypeScript 7.0.2, Vitest 5.1.0, Zod 4.6.7, Tasks Vision 1.2.2, Vite React plugin 6.2.1. All manifest versions are exact; `package-lock.json` pins transitive dependencies and integrity values. Node 24 is an LTS line and satisfies the [Vite Node requirements](https://vite.dev/guide/).
 
@@ -44,8 +45,8 @@ For the visual desk interaction:
 1. Select **Desk / kinematic-only**, then Start camera and calibrate the palm in the fixed oblique desk view. A top-down view can hide the lift; move the camera before starting calibration. Keep the hand visible and wrist steady throughout setup.
 2. Click inside the video to place one ring under the resting index fingertip. The shared inverse mirrored/letterboxed transform stores source pixels. The whole ring must fit. Clicking again replaces the ring and clears all guided recordings. Ordinary viewport resizing preserves source placement; actual camera geometry changes require recalibration.
 3. Click **Capture resting fingertip**, then hold still in the ring for >=500 ms / >=8 samples. Click **Record one lift / return** while resting, lift once, return, hold still for at least three observations, and click **Save this cycle**. Complete 3–5 cycles, then **Finish visual calibration**. Each recording must finish within five seconds. Named rejection reasons require retry or a new setup.
-4. Diagnostics show measured projected excursion, learned lift-to-contact direction, contact band, and wrist speed limit. No audio offset is measured here. Click **Start kinematic trial**; after the countdown, lift clearly and return inside the ring. The ring briefly highlights each emitted visual candidate. Held contact does not repeat; another lift is required. Contact confirmation uses capture-time motion and a later settling/reversal observation, with no tap dwell.
-5. **Visual candidates are not fused or verified taps.** Accepted air reps stay separate. Use the separate fused setup below for audio/visual coincidences. Reset, cancellation, tracking loss, hidden tab, stale input, hand/scale/geometry changes, or ring replacement clear pending contact/calibration state. No summary/export is produced yet.
+4. Diagnostics show measured projected excursion, learned lift-to-contact direction, contact band, and wrist speed limit. No audio offset is measured here. Click **Start kinematic trial**; after the countdown, lift clearly and return inside the ring. The ring briefly highlights each accepted kinematic tap; candidate state is shown separately. Held contact does not repeat; another lift is required. Contact confirmation uses capture-time motion and a later settling/reversal observation, with no tap dwell.
+5. **Visual candidates are not fused or verified taps.** Accepted air reps stay separate. Use the separate fused setup below for audio/visual coincidences. Reset, cancellation, tracking loss, hidden tab, stale input, hand/scale/geometry changes, or ring replacement clear pending contact/calibration state. Completed and interrupted trials produce a local result; aborted early/late comparisons remain unavailable.
 
 The phase 3 live palm-calibration issue still blocks a hardware-verified demonstration of these flows. Do not widen the open-palm threshold to bypass it without investigation/evidence. Exact pending checks and provisional limits are in [docs/progress.md](docs/progress.md).
 
@@ -60,16 +61,16 @@ Select **Synthetic replay** first. This disposes any live owner.
 2. Click **Calibrate synthetic palm**. The real calibration engine requires three seconds and at least 45 stable open-palm samples. This 20 Hz fixture normally supplies 61 observations over 3000 ms.
 3. Click **Start synthetic trial** after calibration. A three-second countdown precedes a fixed 15-second synthetic air trial. The engine computes source-pixel collision, continuous 250 ms dwell, release, attempts, lockouts, and reps. The fixture alternates index target entry/release; counts depend on the start time.
 4. Toggle **Compact stub composition** during the trial. Both views consume the same controller and high-rate geometry buffer; switching retains the session.
-5. **Reset** clears calibration and counters while keeping the prepared adapter ready. Calibrate again. **Stop** returns to idle. Switching exercise/mode invalidates the setup. This fixture only supplies air observations; desk setup explicitly requires live camera input.
+5. **Reset** clears calibration and counters while keeping the prepared adapter ready. Calibrate again. **Stop** returns to idle. Switching exercise/mode invalidates the setup. For desk replay, select the desk mode, calibrate, place the ring beneath the fixture fingertip, capture rest and hold for at least 500 ms. Record three visual cycles, pressing **Replay one lift / tap** once per recording, waiting 800 ms, then saving. Fused replay additionally needs three timing recordings using the same tap button and wait. Finish timing, start the trial, and use the tap button for each artificial tap.
 
-The replay is bounded to 60 seconds of artificial observations. Input expiry during a trial, tracking loss, stale input, hand/scale changes, and tab hiding require recalibration and a fresh countdown. No prerecorded success counters are used. Estimated PIP/DIP bends, the MCP proxy, and palm orientation deviation are labeled estimates/proxies. Summary/ROM aggregation and validated export remain phase 6. Replay performance is not live hardware evidence.
+The replay is bounded to 60 seconds of artificial observations. Input expiry during a trial, tracking loss, stale input, hand/scale changes, and tab hiding require recalibration and a fresh countdown. No prerecorded success counters are used. Estimated PIP/DIP bends, the MCP proxy, and palm orientation deviation are labeled estimates/proxies. Local summaries and validated export use the computed observations, including estimated ROM for air trials. Replay performance is not live hardware evidence.
 
 ## Try fused desk diagnostics
 
 1. Select **Desk / fused coincidence** before setup. Click **Start camera** and **Start / retry microphone (keep quiet)** separately. Keep quiet for 1.5 seconds. Diagnostics show the actual context sample rate/block size, supported/actual processing settings, RMS/noise/threshold, and explicit audio-to-performance clock anchor. Clipped/noisy/missing input fails visibly. Browser processing constraints are requests, not guarantees.
 2. Complete the same palm/ring/rest/3–5 visual cycles above; finish visual calibration. Then record **3–5 additional timing taps**, one lift/tap/return per **Record timing tap** window, at least 600 ms apart. Avoid speech/impacts. Wait at least 250 ms after contact before **Save timing pair**. Exactly one visual candidate and one acoustic onset must occur per window; each window expires after five seconds.
 3. Click **Finish timing calibration**. The app learns the median audio-minus-visual onset offset and maximum absolute residual. Residual >40 ms or offset magnitude >1000 ms rejects the set and clears pairs for retry. Do not assume a zero hardware offset. Geometry, onset thresholds, timing and wrist gates remain provisional until measured on the demo setup.
-4. Start a fused trial. Diagnostics distinguish visual candidates, acoustic impulses and coincidences, showing a bounded capture/sample-time trace. Audio uses the 10 ms rolling RMS onset time and peak RMS amplitude. Matching uses an 80 ms tolerance after offset correction and an independent 250 ms delivery budget, with one use per source event/contact cycle. Coincidence is not proof of physical contact. Ring scoring/summary/export are the phase 6 handoff.
+4. Start a fused trial. Diagnostics distinguish visual candidates, acoustic impulses and coincidences, showing a bounded capture/sample-time trace. Audio uses the 10 ms rolling RMS onset time and peak RMS amplitude. Matching uses an 80 ms tolerance after offset correction and an independent 250 ms delivery budget, with one use per source event/contact cycle. Coincidence is not proof of physical contact. Each accepted event highlights the ring once and increments the accepted counter. After 15 seconds and the bounded 250 ms late-event grace, inspect Results and click **Export validated JSON**. Exported counts, frequency, early/late rates, rate change, rhythm SD, relative acoustic statistics and quality come from the same collector.
 5. Microphone denial does not stop CV. Retry microphone, or explicitly select **Desk / kinematic-only** and recalibrate. No automatic fallback or verified count is invented. Suspend, mute/end/device change, clock discontinuity, hidden tab, reset and session changes invalidate pending state. Stop releases both devices. No app audio feedback is played while listening.
 
 ## Boundaries and data
@@ -81,7 +82,7 @@ The replay is bounded to 60 seconds of artificial observations. Input expiry dur
 - `src/workers/`: running local HandLandmarker with explicit GPU/CPU probe/failure/disposal. `src/audio/tapProcessor.ts` is compiled as a local AudioWorklet: PCM stays there; only impulses and a throttled numeric meter leave it; output is silent. All worker/test code stays in the checked `src` tree with scoped worker globals.
 - `fixtures/`: bounded artificial coordinates/timestamps only. No captured media or user recordings. The fixture supplies observations, and the engines compute scores.
 
-Telemetry is a discriminated exercise union with sensor/status refinements. Numeric reconciliation tolerance is 1e-6. Limits are exported from `src/lib/config.ts`; JSON intake has a 16 KiB UTF-8 limit before parsing. Quality coverage is 0 when totalFrames is 0; compensation is null with zero attempts. Telemetry includes hand/configuration revision so baseline context can be checked. Baseline collection/storage and aggregation are not implemented.
+Telemetry is a discriminated exercise union with sensor/status refinements. Numeric reconciliation tolerance is 1e-6. Limits are exported from `src/lib/config.ts`; JSON intake has a 16 KiB UTF-8 limit before parsing. Quality coverage is 0 when totalFrames is 0; compensation is null with zero attempts. Telemetry includes hand/configuration revision so baseline context can be checked. Aggregation is memory-only; baseline collection/storage is not implemented. Baseline comparisons remain null. A cancelled countdown has no result; an interrupted started trial has an aborted result with early/late comparisons null. Reset clears the result and calibration.
 
 Nothing persists or uploads frames, PCM, landmarks, or session summaries. Browser requests load same-origin model/WASM/worker assets (and Vite's local development connection). MediaPipe receives only local bitmaps in the worker; camera frames never enter logging or storage. Download URLs in the preparation script's manifest are setup-only. Aggregate telemetry is minimized, not guaranteed anonymous.
 
@@ -91,8 +92,20 @@ See [asset provenance](docs/assets.md) and [checksums](docs/assets-manifest.json
 
 Build refuses absent/corrupt assets. Browser preflight also checks hashes, including when a development server returns an HTML fallback for a missing path, and shows an actionable setup error. Synthetic fixture delivery remains available with an explicit asset error because it does not invoke the model. The GPU worker pipeline has been exercised in development and the production bundle on the local MacBook camera. Other browsers/delegates and disconnected-internet operation still need verification; full hand-calibration acceptance remains pending.
 
-## Verification and phase 6 handoff
+## Verification and live acceptance
 
 See [docs/progress.md](docs/progress.md) for exact commands, measurements, hardware limitations, and the remaining operator procedure. The production GPU check observed 120 render FPS, 30 inference FPS, and 19.9 ms p95 age over a rolling 60-second window with mixed hand/no-hand input. It does **not** establish 60 seconds of stable calibrated tracking. Only one hand's alignment was operator-checked; calibration rejected the straight-finger report with index DIP estimates near 42° against the provisional 20° gate. Angles/thresholds were preserved and that issue remains open.
 
-Phase 5 software passes strict typecheck, 119 deterministic tests, and production build. Replay diagnostics exercise both event arrival orders and unmatched motion/noise independently of air reps. No phase 5 live microphone/calibration/noise acceptance check was performed. Follow the exact phase 3–5 operator checks in `docs/progress.md`; keep the hardware gates open. Phase 6 adds deterministic summaries/export, automated Playwright flows and the complete live release gate. No automated Playwright suite is installed yet; integration evidence currently combines real-browser replay smoke checks and deterministic controller/worklet/lifecycle tests.
+Phase 6 automated evidence and pending hardware checks are recorded in [docs/progress.md](docs/progress.md). Build before browser tests:
+
+```sh
+npm run typecheck
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+If Google Chrome is already installed, `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e` selects that browser without downloading Playwright Chromium. The default uses Playwright's matching Chromium. Tests use only localhost port 4176 and artificial observations or deliberately denied device requests. They verify full air/fused/kinematic workflows, export reconciliation, reset/restart, hidden-tab/mode aborts and permission/asset recovery. The replay request audit records URL, method and payload size and requires same-origin GETs with no request bodies; it does not establish live media privacy or accuracy.
+
+For live acceptance, use the exact operator checks in the Phase 6 progress entry: resolve palm calibration, measure stable tracking, complete three fused 15-second trials, then record 20 deliberate taps (at least 18 accepted) and 20 noise/no-contact trials (at most one false acceptance). Inspect Network during those live runs. Until recorded, Phase 6's live gate is pending and Phase 7 presentation work must wait.
