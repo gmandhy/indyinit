@@ -13,6 +13,24 @@ export interface AirTarget {
 }
 export interface TargetCircle { readonly center:SourcePixel;readonly radiusPixels:number }
 export const DEFAULT_AIR_TARGET:AirTarget=Object.freeze({id:'index-reach',offsetPalmUnits:{longitudinal:1.6875,transverse:0},radiusPalmUnits:.25,requiredLandmarkIndex:8,dwellMs:AIR_CONFIG.dwellMs});
+/** A small path around the observed index reach, in the frozen image basis.
+ * Drop off-screen circles at setup, and suspend if wrist translation later clips one. */
+export function reachableAirPath(calibration:AirCalibration,sample:Extract<FrameSample,{validity:'valid'}>):readonly AirTarget[] {
+  const reason=calibrationCompatibilityReason(sample,calibration);
+  if(reason)throw new MathInputError(`Cannot place air sequence: ${reason}`);
+  const wrist=imageToPixels(sample.imageLandmarks[0]!,calibration.video),tip=imageToPixels(sample.imageLandmarks[8]!,calibration.video);
+  const dx=(tip.x-wrist.x)/calibration.palmPixels,dy=(tip.y-wrist.y)/calibration.palmPixels,a=calibration.imageBasis;
+  const longitudinal=dx*a.longitudinal.x+dy*a.longitudinal.y,transverse=dx*a.transverse.x+dy*a.transverse.y;
+  const path:AirTarget[]=[];
+  for(const [i,shift] of [0,-.55,.55].entries()){
+    const target:AirTarget={...DEFAULT_AIR_TARGET,id:`reach-${i+1}`,offsetPalmUnits:{longitudinal:longitudinal-(i===0?0:.2),transverse:transverse+shift}};
+    if(Math.hypot(target.offsetPalmUnits.longitudinal,target.offsetPalmUnits.transverse)+target.radiusPalmUnits>AIR_CONFIG.maxReachPalmUnits)continue;
+    try{targetCircle(target,calibration,sample.imageLandmarks[0]!);path.push(target);}
+    catch(error){if(!(error instanceof MathInputError&&error.message.includes('off-screen')))throw error;}
+  }
+  if(path.length<2)throw new MathInputError('No reachable short air sequence fits. Center the hand and recalibrate.');
+  return path;
+}
 function validateTarget(target:AirTarget):void {
   if(!target.id.trim())throw new MathInputError('Target id is required');
   finite(target.offsetPalmUnits.longitudinal,'longitudinal palm units');finite(target.offsetPalmUnits.transverse,'transverse palm units');
@@ -34,6 +52,7 @@ export function calibrationCompatibilityReason(sample:FrameSample,calibration:Ai
   if(sample.selectedHand!==calibration.hand||(sample.validity==='valid'&&sample.handedness.label!==calibration.hand))return 'hand_changed';
   if(sample.validity!=='valid')return sample.validity==='absent'?'no_hand':'invalid_sample';
   if(sample.handedness.confidence<CALIBRATION_CONFIG.minHandConfidence)return 'occlusion';
+  if(sample.imageLandmarks.some(p=>p.x<0||p.x>1||p.y<0||p.y>1))return 'occlusion';
   const o=palmObservation(sample,calibration.video);
   if(Math.abs(o.palmPixels/calibration.palmPixels-1)>AIR_CONFIG.maxScaleChangeRatio||Math.abs(o.palmWorld/calibration.palmWorld-1)>AIR_CONFIG.maxScaleChangeRatio)return 'scale_changed';
   return null;

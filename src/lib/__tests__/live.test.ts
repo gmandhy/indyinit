@@ -49,7 +49,7 @@ describe('controller live geometry boundary',()=>{
       sink({type:'frame',sample:syntheticHandFrame(now,0,hand)});expect(c.getSnapshot().tracking).toBe('valid');
       c.calibrate();for(let i=1;i<=62;i++){now=i*50;sink({type:'frame',sample:syntheticHandFrame(now,i,hand)});}
       expect(c.getSnapshot()).toMatchObject({phase:'calibrated',calibration:{hand,video:{width:1280,height:720}},metrics:{estimatedPipDeg:0}});
-      c.startExercise();expect(c.getSnapshot().phase).toBe('calibrated'); // live scoring belongs to phase 4
+      c.startExercise();expect(c.getSnapshot().phase).toBe('countdown');
       c.reset();expect(c.getSnapshot()).toMatchObject({phase:'idle',calibration:null,tracking:'not_started'});expect(c.frameBuffer.media).toBeNull();
       now+=50;sink({type:'frame',sample:syntheticHandFrame(now,80,hand)});expect(c.frameBuffer.current).toBeNull();c.dispose();
     }

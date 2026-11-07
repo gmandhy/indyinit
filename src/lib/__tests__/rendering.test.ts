@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { drawReplayPreview } from '../../rendering/replayPreview';
 import { syntheticHandFrame } from '../../../fixtures/syntheticHand';
-import { containFit, imageToPixels, sourceToDisplay } from '../coordinates';
+import { containFit, imageToPixels, sourcePixel, sourceToDisplay } from '../coordinates';
 function context() {
   return {clearRect:vi.fn(),save:vi.fn(),translate:vi.fn(),scale:vi.fn(),drawImage:vi.fn(),restore:vi.fn(),strokeRect:vi.fn(),beginPath:vi.fn(),arc:vi.fn(),fill:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),stroke:vi.fn(),fillText:vi.fn()} as unknown as CanvasRenderingContext2D;
 }
@@ -24,5 +24,12 @@ describe('live skeleton/video presentation',()=>{
     expect(ctx.drawImage).toHaveBeenCalledTimes(1);expect(ctx.arc).not.toHaveBeenCalled();
     drawReplayPreview(ctx,{current:{sequence:1,captureTimeMs:140,selectedHand:'Right',validity:'absent',reason:'no_hand'},media}, {width:640,height:360},145);
     expect(ctx.drawImage).toHaveBeenCalledTimes(2);expect(ctx.arc).not.toHaveBeenCalled();
+  });
+  it('draws the placed desk ring with no hand and highlights an emitted candidate without changing it',()=>{
+    const ctx=context(),desk={region:{center:sourcePixel(250,200),radiusPixels:25},visual:null,lastCandidate:{sequence:1,cycle:1,captureTimeMs:50,observedAtMs:80}},video={width:640,height:480},viewport={width:800,height:400};
+    const before=JSON.stringify(desk);drawReplayPreview(ctx,{current:null,desk,video},viewport,100);
+    const fit=containFit(video,viewport),p=sourceToDisplay(desk.region.center,fit);
+    expect(ctx.arc).toHaveBeenCalledExactlyOnceWith(p.x,p.y,25*fit.scale,0,Math.PI*2);expect(ctx.fillText).toHaveBeenCalledWith('Visual candidate',fit.ox+8,fit.oy+36);
+    drawReplayPreview(ctx,{current:null,desk,video},viewport,300);expect(JSON.stringify(desk)).toBe(before);
   });
 });

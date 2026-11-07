@@ -1,4 +1,4 @@
-import { FRAME_CONFIG } from '../lib/config';
+import { FRAME_CONFIG, TARGET_FEEDBACK_CONFIG } from '../lib/config';
 import type { FrameBuffer } from '../engine/contracts';
 import type { Size } from '../lib/coordinates';
 import { containFit, imageToPixels, sourceToDisplay } from '../lib/coordinates';
@@ -12,6 +12,15 @@ export function drawReplayPreview(context:CanvasRenderingContext2D,buffer:FrameB
     context.drawImage(media,0,0,fit.scale*fit.video.width,fit.scale*fit.video.height);context.restore();
   }
   context.strokeStyle='#789';context.strokeRect(fit.ox,fit.oy,fit.scale*fit.video.width,fit.scale*fit.video.height);
+  // A placed ring remains visible when the hand is absent. Rendering is read-only;
+  // presentation highlight duration never changes candidate eligibility.
+  const desk=buffer.desk;
+  if(desk?.region){
+    const p=sourceToDisplay(desk.region.center,fit),recent=nowMs!==undefined&&desk.lastCandidate!==null&&nowMs-desk.lastCandidate.observedAtMs>=0&&nowMs-desk.lastCandidate.observedAtMs<=TARGET_FEEDBACK_CONFIG.candidateHighlightMs;
+    context.lineWidth=recent?4:2;context.strokeStyle=recent?'#087f5b':desk.visual?.phase==='contactCandidate'?'#a60':'#165dc0';
+    context.beginPath();context.arc(p.x,p.y,desk.region.radiusPixels*fit.scale,0,Math.PI*2);context.stroke();
+    context.fillStyle='#165dc0';context.fillText(recent?'Visual candidate':`Desk ring: ${desk.visual?.phase??'setup'}`,fit.ox+8,fit.oy+36);
+  }
   if(sample?.validity!=='valid'||(nowMs!==undefined&&nowMs-sample.captureTimeMs>FRAME_CONFIG.maxAgeMs))return;
   context.strokeStyle=media?'#00ffff':'#123';context.lineWidth=2;
   for(const [a,b] of HAND_CONNECTIONS){

@@ -76,7 +76,7 @@ describe('local sensor boundaries', () => {
     const calibration = { imageBasis:{longitudinal:{x:0,y:-1},transverse:{x:1,y:0}}, hand: 'Right', video: {width:640,height:480}, palmWorld:.08, palmPixels:80, palmBasis:{longitudinal:{x:0,y:1,z:0},transverse:{x:1,y:0,z:0},normal:{x:0,y:0,z:-1}}, configurationRevision:'foundation-1', exercise:'air_targets',sensorMode:'vision_only' };
     expect(CalibrationSchema.safeParse(calibration).success).toBe(true);
     for (const patch of [{palmWorld:0},{palmPixels:NaN},{palmBasis:{...calibration.palmBasis,normal:{x:0,y:0,z:1}}},{sensorMode:'fused'},{desk:{}}]) expect(CalibrationSchema.safeParse({...calibration,...patch}).success).toBe(false);
-    const deskCalibration = { ...calibration, exercise:'desk_tap', sensorMode:'fused', desk:{region:{center:{x:200,y:200},radiusPixels:30},rest:{x:200,y:200},contactDirection:{x:0,y:1},contactBand:{minPalmUnits:-.1,maxPalmUnits:.1},excursionPalmUnits:.2,wristTolerancePalmUnitsPerSecond:1},audio:{offsetMs:20,residualSpreadMs:10} };
+    const deskCalibration = { ...calibration, exercise:'desk_tap', sensorMode:'fused', desk:{region:{center:{x:200,y:200},radiusPixels:30},rest:{x:200,y:200},wristRest:{x:200,y:250},contactDirection:{x:0,y:1},contactBand:{minPalmUnits:-.1,maxPalmUnits:.1},excursionPalmUnits:.2,wristTolerancePalmUnitsPerSecond:1},audio:{offsetMs:20,residualSpreadMs:10} };
     expect(CalibrationSchema.safeParse(deskCalibration).success).toBe(true);
     expect(CalibrationSchema.safeParse({...deskCalibration,audio:undefined}).success).toBe(false);
     expect(CalibrationSchema.safeParse({...deskCalibration,audio:{offsetMs:0,residualSpreadMs:100}}).success).toBe(false);

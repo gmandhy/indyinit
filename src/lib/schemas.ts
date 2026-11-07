@@ -29,7 +29,7 @@ const basis = z.strictObject({ longitudinal: unitVector, transverse: unitVector,
 }, 'Expected right-handed orthonormal palm basis');
 const pixelPoint = z.strictObject({ x: nonnegative, y: nonnegative });
 const desk = z.strictObject({
-  region: z.strictObject({ center: pixelPoint, radiusPixels: positive }), rest: pixelPoint,
+  region: z.strictObject({ center: pixelPoint, radiusPixels: positive }), rest: pixelPoint, wristRest: pixelPoint,
   contactDirection: z.strictObject({ x: finite, y: finite }).refine(v => near(v.x*v.x+v.y*v.y,1), 'Expected unit direction'),
   contactBand: z.strictObject({ minPalmUnits: finite, maxPalmUnits: finite }).refine(v => v.maxPalmUnits > v.minPalmUnits, 'Empty contact band'),
   excursionPalmUnits: positive, wristTolerancePalmUnitsPerSecond: positive,
@@ -41,7 +41,14 @@ export const CalibrationSchema = z.discriminatedUnion('sensorMode', [
   z.strictObject({ ...calibrationBase, exercise: z.literal('air_targets'), sensorMode: z.literal('vision_only') }),
   z.strictObject({ ...calibrationBase, exercise: z.literal('desk_tap'), sensorMode: z.literal('kinematic_only'), desk }),
   z.strictObject({ ...calibrationBase, exercise: z.literal('desk_tap'), sensorMode: z.literal('fused'), desk, audio: z.strictObject({ offsetMs: finite.min(-1000).max(1000), residualSpreadMs: nonnegative.max(80) }) }),
-]).refine(c => c.sensorMode === 'vision_only' || (c.desk.region.center.x <= c.video.width && c.desk.region.center.y <= c.video.height && c.desk.rest.x <= c.video.width && c.desk.rest.y <= c.video.height), 'Desk points outside source video');
+]).refine(c => {
+  if(c.sensorMode==='vision_only')return true;
+  const {region:r,rest,wristRest:w,contactBand:b}=c.desk;
+  return r.center.x-r.radiusPixels>=0&&r.center.y-r.radiusPixels>=0&&r.center.x+r.radiusPixels<=c.video.width&&r.center.y+r.radiusPixels<=c.video.height
+    &&rest.x<=c.video.width&&rest.y<=c.video.height&&w.x<=c.video.width&&w.y<=c.video.height
+    &&Math.hypot(rest.x-r.center.x,rest.y-r.center.y)<=r.radiusPixels
+    &&b.minPalmUnits<=0&&b.maxPalmUnits>=0&&c.desk.excursionPalmUnits>-b.minPalmUnits;
+}, 'Invalid desk geometry/contact band');
 export type Calibration = z.infer<typeof CalibrationSchema>;
 export const QualitySchema = z.strictObject({
   validFrames: count, totalFrames: count, trackingCoverage: ratio, attempts: count, blockedAttempts: count, lockoutEvents: count,

@@ -1,3 +1,4 @@
+import { syntheticDiagnosticEvents } from '../../fixtures/acousticEvents';
 import { syntheticFrames } from '../../fixtures/syntheticHand';
 import type { AdapterEvent, SessionAdapter } from '../engine/contracts';
 /** Browser scheduling only; no exercise/scoring algorithms. One bounded fixture, cancellable. */
@@ -26,6 +27,7 @@ export function createReplayAdapter(now: () => number): SessionAdapter {
         index++;
         emit({ type: 'frame', sample: { ...sample, captureTimeMs: anchor+sample.captureTimeMs } });
         if(disposed||token!==generation)return;
+        for(const event of syntheticDiagnosticEvents(sample.captureTimeMs,anchor)){emit(event);if(disposed||token!==generation)return;}
         const delay = Math.max(0, Math.ceil(anchor+(syntheticFrames[index]?.captureTimeMs ?? sample.captureTimeMs+50)-now()));
         timer = setTimeout(next, delay);
       };

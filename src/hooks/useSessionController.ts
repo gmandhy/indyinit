@@ -1,3 +1,4 @@
+import { createAudioAdapter } from '../adapters/audio';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createLiveAdapter } from '../adapters/live';
 import { verifyLocalAssets } from '../adapters/vision';
@@ -12,7 +13,7 @@ export function useSessionController(source: 'live' | 'synthetic_replay' = 'live
   useEffect(() => {
     // Each effect owns its controller. Strict Mode cleanup cannot poison the next mount.
     const abort = new AbortController();
-    const owned = source === 'live' ? createSessionController(createLiveAdapter()) : createSessionController(createReplayAdapter(() => performance.now()), () => verifyLocalAssets(abort.signal));
+    const owned = source === 'live' ? createSessionController(createLiveAdapter(),undefined,()=>performance.now(),undefined,createAudioAdapter()) : createSessionController(createReplayAdapter(() => performance.now()), () => verifyLocalAssets(abort.signal));
     controller.current = owned;
     frameBuffer.current = owned.frameBuffer;
     setSnapshot(owned.getSnapshot());
@@ -25,7 +26,13 @@ export function useSessionController(source: 'live' | 'synthetic_replay' = 'live
   const commands = useMemo<ControllerCommands>(() => ({
     tick:()=>controller.current?.tick(), setHidden:hidden=>controller.current?.setHidden(hidden),
     startDevices: async () => { await controller.current?.startDevices(); },
+    startMicrophone:async()=>{await controller.current?.startMicrophone();},
+    beginTimingPair:()=>controller.current?.beginTimingPair(),saveTimingPair:()=>controller.current?.saveTimingPair(),finishTimingCalibration:()=>controller.current?.finishTimingCalibration(),
     calibrate: () => controller.current?.calibrate(), startExercise: () => controller.current?.startExercise(),
+    cancelCalibration:()=>controller.current?.cancelCalibration(),
+    placeDeskRing:(point,viewport)=>controller.current?.placeDeskRing(point,viewport),
+    captureDeskRest:()=>controller.current?.captureDeskRest(),beginDeskCycle:()=>controller.current?.beginDeskCycle(),
+    saveDeskCycle:()=>controller.current?.saveDeskCycle(),finishDeskCalibration:()=>controller.current?.finishDeskCalibration(),
     stop: () => controller.current?.stop(), reset: () => controller.current?.reset(),
     selectExercise: selection => controller.current?.selectExercise(selection), dispose: () => controller.current?.dispose(),
   }), []);
