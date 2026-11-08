@@ -5,7 +5,7 @@ import { createCoincidenceMatcher, estimateTimingCalibration } from '../lib/acou
 import type { FusedEvent, TimingPair } from '../lib/acousticTap';
 import type { VisualCandidate, DeskCalibration } from '../lib/deskVisual';
 import { CalibrationSchema, AudioImpulseSchema, FrameSampleSchema } from '../lib/schemas';
-import type { FrameSample } from '../lib/schemas';
+import type { Calibration, FrameSample } from '../lib/schemas';
 import { emptyFusion, initialSnapshot } from './contracts';
 import type { AdapterEvent, DeskSnapshot, SessionAdapter, SessionController, SessionSnapshot } from './contracts';
 import { createSessionMachine } from './sessionReducer';
@@ -13,10 +13,11 @@ import { createPalmCalibrator } from '../lib/calibration';
 import { calibrationCompatibilityReason, createAirTargetEngine, DEFAULT_AIR_TARGET, reachableAirPath } from '../lib/spatialTargets';
 import { createDeskCalibrator, createDeskVisualDetector, deskCompatibilityReason } from '../lib/deskVisual';
 import type { AirCalibration } from '../lib/calibration';
-import { containFit, displayToSource } from '../lib/coordinates';
+import { containFit, displayToSource, sourcePixel } from '../lib/coordinates';
 import { indexFlexionEstimates, smoothDisplay } from '../lib/biomechanics';
 import type { SmoothedDisplay } from '../lib/biomechanics';
 import { DESK_CONFIG, FRAME_CONFIG, FUSION_CONFIG, LIMITS, SESSION_CONFIG } from '../lib/config';
+import { createDeskPadDetector, validateDeskPads } from '../lib/deskPads';
 import { MathInputError, timeMs } from '../lib/mathValidation';
 import type { Size } from '../lib/coordinates';
 /** Orchestration only. Adapter owns scheduling/devices; pure engines own math and scoring. */
@@ -24,8 +25,15 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
   const machine=createSessionMachine(now);
   const live=adapter.source==='live', label=live?'Live':'Synthetic';
   let snapshot=initialSnapshot(adapter.source),disposed=false,generation=0,audioGeneration=0,lastSequence=-1,lastTime=-1,lastPublish=-Infinity;
-  let calibrator=createPalmCalibrator(video),air:ReturnType<typeof createAirTargetEngine>|null=null,display:SmoothedDisplay|null=null;
+  function newPalmCalibrator(){return createPalmCalibrator(video,{},snapshot.selection.exercise==='desk_tap'?'desk_geometry':'open_hand');}
+  let calibrator=newPalmCalibrator(),air:ReturnType<typeof createAirTargetEngine>|null=null,display:SmoothedDisplay|null=null;
   let deskCalibrator:ReturnType<typeof createDeskCalibrator>|null=null,deskDetector:ReturnType<typeof createDeskVisualDetector>|null=null,deskPalm:AirCalibration|null=null;
+  let layout:'single'|'left_right'='single',savedPads:DeskCalibration[]=[];
+  function makeDeskDetector(cal:Extract<Calibration,{exercise:'desk_tap'}>){
+    if(layout==='single')return createDeskVisualDetector(cal);
+    if(savedPads.length!==2)throw new MathInputError('Calibrate both Left and Right pads first.');
+    return createDeskPadDetector(savedPads[0]!,savedPads[1]!);
+  }
   let matcher:ReturnType<typeof createCoincidenceMatcher>|null=null,timingCalibration:DeskCalibration|null=null;
   let pairs:TimingPair[]=[],pairStart:number|null=null,pairVisuals:VisualCandidate[]=[],pairAudios:import('../lib/schemas').AudioImpulse[]=[];
   let collector:ReturnType<typeof createTelemetryCollector>|null=null,trialStart:number|null=null;
@@ -35,16 +43,16 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
     if(aborted){snapshot={...snapshot,result:t>=trialStart?collector.finish('aborted',Math.min(t,end)):null};collector=null;trialStart=null;}
     else if(t>end+(snapshot.selection.exercise==='desk_tap'?SESSION_CONFIG.deliveryGraceMs:0)){snapshot={...snapshot,result:collector.finish('completed',end)};collector=null;trialStart=null;}
   }
-  function accepted(cycle:number,capture:number,rms:number|null){
+  function accepted(cycle:number,capture:number,rms:number|null,position?:VisualCandidate['position'],pad?:VisualCandidate['pad']){
     if(!collector?.tap(cycle,capture,rms))return;
-    deskUpdate({acceptedTapCount:(snapshot.desk?.acceptedTapCount??0)+1,lastAccepted:{atMs:now(),mode:snapshot.selection.sensorMode==='fused'?'fused':'kinematic_only'}},false);
+    deskUpdate({acceptedTapCount:(snapshot.desk?.acceptedTapCount??0)+1,lastAccepted:{atMs:now(),mode:snapshot.selection.sensorMode==='fused'?'fused':'kinematic_only',...(position?{position}:{}),...(pad?{pad}:{})},...(pad==='left'?{leftTapCount:(snapshot.desk?.leftTapCount??0)+1}:pad==='right'?{rightTapCount:(snapshot.desk?.rightTapCount??0)+1}:{})},false);
   }
   const listeners=new Set<()=>void>();
   function trace(kind:'visual'|'acoustic'|'fused',timeMs:number){snapshot={...snapshot,fusion:{...snapshot.fusion,trace:[...snapshot.fusion.trace,{kind,timeMs}].slice(-32)}};}
-  function matched(event:FusedEvent|null){if(!event)return;if(snapshot.selection.sensorMode==='fused')accepted(event.visual.cycle,event.visual.captureTimeMs,event.audio.rms);trace('fused',event.visual.captureTimeMs);snapshot={...snapshot,fusion:{...snapshot.fusion,fusedCount:snapshot.fusion.fusedCount+1,lastFused:event}};}
+  function matched(event:FusedEvent|null){if(!event)return;if(snapshot.selection.sensorMode==='fused')accepted(event.visual.cycle,event.visual.captureTimeMs,event.audio.rms,event.visual.position,event.visual.pad);trace('fused',event.visual.captureTimeMs);snapshot={...snapshot,fusion:{...snapshot.fusion,fusedCount:snapshot.fusion.fusedCount+1,lastFused:event}};}
   function visualEvent(candidate:VisualCandidate){
     collector?.visual(candidate.captureTimeMs);
-    if(snapshot.selection.sensorMode==='kinematic_only'&&machine.acceptsCapture(candidate.captureTimeMs))accepted(candidate.cycle,candidate.captureTimeMs,null);
+    if(snapshot.selection.sensorMode==='kinematic_only'&&machine.acceptsCapture(candidate.captureTimeMs))accepted(candidate.cycle,candidate.captureTimeMs,null,candidate.position,candidate.pad);
     trace('visual',candidate.captureTimeMs);snapshot={...snapshot,fusion:{...snapshot.fusion,visualCount:snapshot.fusion.visualCount+1}};
     if(pairStart!==null&&candidate.captureTimeMs>=pairStart&&pairVisuals.length<2)pairVisuals.push(candidate);
     if(matcher)matched(matcher.visual(candidate,now()));
@@ -56,7 +64,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
       if(event.diagnostics.state==='unavailable'&&snapshot.selection.sensorMode==='fused'&&['calibrating','calibrated','countdown','running','complete'].includes(machine.getState().phase))suspend('Microphone unavailable; fused setup/trial invalidated. Retry microphone and recalibrate, or explicitly select kinematic-only.');
       update({audio:event.diagnostics},changed);return;
     }
-    if(!AudioImpulseSchema.safeParse(event.impulse).success){suspend('Invalid audio event; recalibrate.');return;}
+    if(!AudioImpulseSchema.safeParse(event.impulse).success){suspend('Invalid audio event; recalibrate.',true);return;}
     const t=now(),impulse=event.impulse;
     if(impulse.sampleTimeMs>t||t-impulse.sampleTimeMs>FUSION_CONFIG.deliveryLatenessMs){update({fusion:{...snapshot.fusion,rejectedAudioCount:snapshot.fusion.rejectedAudioCount+1,lastRejection:impulse.sampleTimeMs>t?'Future audio timestamp':'Audio delivery exceeded 250 ms'}},false);return;}
     trace('acoustic',impulse.sampleTimeMs);snapshot={...snapshot,fusion:{...snapshot.fusion,audioCount:snapshot.fusion.audioCount+1,lastAudio:impulse}};
@@ -65,24 +73,30 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
     update({},false);
   }
 
-  const frameBuffer:SessionController['frameBuffer']={current:null,target:null,video,media:null,recordRender:()=>adapter.recordRender?.()};
+  const frameListeners=new Set<(sample:FrameSample)=>void>();
+  let lastNotifiedFrame:FrameSample|null=null;
+  const frameBuffer:SessionController['frameBuffer']={subscribeFrames(listener){frameListeners.add(listener);if(frameBuffer.current)listener(frameBuffer.current);return()=>{frameListeners.delete(listener);};},current:null,target:null,video,media:null,recordRender:()=>adapter.recordRender?.()};
   function update(patch:Partial<SessionSnapshot>,force=true){
     const state=machine.getState(),tNow=now();
-    snapshot={...snapshot,...patch,phase:state.phase,trial:state.countdownEndsAtMs===null?null:{countdownSeconds:Math.max(0,(state.countdownEndsAtMs-tNow)/1000),remainingSeconds:Math.max(0,((state.endsAtMs??state.countdownEndsAtMs+SESSION_CONFIG.trialMs)-tNow)/1000),settling:state.phase==='complete'&&collector!==null}};
+    snapshot={...snapshot,...patch,deskLayout:layout,phase:state.phase,trial:state.countdownEndsAtMs===null?null:{countdownSeconds:Math.max(0,(state.countdownEndsAtMs-tNow)/1000),remainingSeconds:Math.max(0,((state.endsAtMs??state.countdownEndsAtMs+SESSION_CONFIG.trialMs)-tNow)/1000),settling:state.phase==='complete'&&collector!==null}};
+    // Deliver each accepted sample once; low-rate UI polling must not reset capture-time holds.
+    if(frameBuffer.current&&frameBuffer.current!==lastNotifiedFrame){lastNotifiedFrame=frameBuffer.current;for(const listener of frameListeners)listener(frameBuffer.current);}
     const t=timeMs(now());
     if(force||t-lastPublish>=LIMITS.snapshotIntervalMs){lastPublish=t;for(const listener of listeners)listener();}
   }
-  function clearDesk(){matcher?.reset();matcher=null;timingCalibration=null;pairs=[];pairStart=null;pairVisuals=[];pairAudios=[];snapshot={...snapshot,fusion:emptyFusion()};deskCalibrator?.invalidate('cancelled');deskDetector?.reset('cancelled',true);deskCalibrator=null;deskDetector=null;deskPalm=null;frameBuffer.desk=null;}
-  function clear(){collector=null;trialStart=null;frameBuffer.current=null;frameBuffer.target=null;lastSequence=-1;lastTime=-1;air=null;display=null;calibrator=createPalmCalibrator(video);clearDesk();}
+  function clearDesk(){savedPads=[];matcher?.reset();matcher=null;timingCalibration=null;pairs=[];pairStart=null;pairVisuals=[];pairAudios=[];snapshot={...snapshot,fusion:emptyFusion()};deskCalibrator?.invalidate('cancelled');deskDetector?.reset('cancelled',true);deskCalibrator=null;deskDetector=null;deskPalm=null;frameBuffer.desk=null;}
+  function clear(){collector=null;trialStart=null;frameBuffer.current=null;frameBuffer.target=null;lastSequence=-1;lastTime=-1;air=null;display=null;calibrator=newPalmCalibrator();clearDesk();}
   function fail(message:string){finishTrial(true);generation++;adapter.stop();audioGeneration++;audio?.stop();clear();snapshot={...snapshot,audio:audio?.getDiagnostics()??snapshot.audio};frameBuffer.media=null;machine.send('fault');update({diagnostics:{...snapshot.diagnostics,...adapter.getDiagnostics?.()},message,calibration:null,calibrationStatus:'not_started',air:null,desk:null,target:null,tracking:'not_started',metrics:initialSnapshot(adapter.source).metrics});}
-  function suspend(message:string){
+  function suspend(message:string,invalidateAudio=false){
     finishTrial(true);const previous=machine.getState().phase;
-    display=null;air?.invalidate(message);frameBuffer.target=null;clearDesk();machine.send('tracking_lost');audio?.reset();
+    display=null;air?.invalidate(message);frameBuffer.target=null;clearDesk();machine.send('tracking_lost');
+    // Camera loss invalidates visual geometry and fusion queues, not microphone noise/clock calibration.
+    if(invalidateAudio)audio?.reset();
     update({message,calibration:null,calibrationStatus:'not_started',air:air?.getState()??null,desk:null,target:null,metrics:{...snapshot.metrics,rawEstimatedPipDeg:null,estimatedPipDeg:null,estimatedDipDeg:null,estimatedMcpProxyDeg:null}},machine.getState().phase!==previous);
   }
   function deskUpdate(patch:Partial<DeskSnapshot>,force=true){
     const desk:DeskSnapshot={placing:false,region:null,setup:null,visual:null,visualCandidateCount:0,lastCandidate:null,acceptedTapCount:0,lastAccepted:null,...snapshot.desk,...patch};
-    frameBuffer.desk={region:desk.region,visual:desk.visual,lastCandidate:desk.lastCandidate,lastAccepted:desk.lastAccepted};
+    frameBuffer.desk={...(desk.pads?{pads:desk.pads}:{}),region:desk.region,visual:desk.visual,lastCandidate:desk.lastCandidate,lastAccepted:desk.lastAccepted};
     if(force)update({desk});else snapshot={...snapshot,desk};
   }
   function freshDeskCommand(){
@@ -181,7 +195,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
           const reason=calibrationCompatibilityReason(sample,snapshot.calibration);
           if(reason){suspend(`Calibration invalidated: ${reason}. Recalibrate.`);update({tracking:sample.validity,diagnostics});return;}
         }else if(snapshot.calibration?.exercise==='desk_tap'){
-          const reason=deskCompatibilityReason(sample,snapshot.calibration,video);
+          const reason=layout==='left_right'&&savedPads.length===2?(savedPads.some(cal=>!deskCompatibilityReason(sample,cal,video))?null:deskCompatibilityReason(sample,snapshot.calibration,video)):deskCompatibilityReason(sample,snapshot.calibration,video);
           if(reason||gap){suspend(`Desk calibration invalidated: ${reason??'tracking_gap'}. Recalibrate.`);update({tracking:sample.validity,diagnostics});return;}
         }else if(sample.validity!=='valid'){suspend('Hand lost after calibration; recalibrate.');update({tracking:sample.validity,diagnostics});return;}
       }
@@ -190,12 +204,13 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
       if(!(error instanceof MathInputError))throw error;
       display=null;frameBuffer.current={sequence:sample.sequence,captureTimeMs:sample.captureTimeMs,selectedHand:sample.selectedHand,validity:'invalid',reason:'malformed'};
       air?.invalidate('invalid_math');frameBuffer.target=null;
-      if(phase==='calibrating'&&!deskPalm){calibrator=createPalmCalibrator(video);update({tracking:'invalid',metrics:{...snapshot.metrics,rawEstimatedPipDeg:null,estimatedPipDeg:null,estimatedDipDeg:null,estimatedMcpProxyDeg:null},calibrationMessage:error.message,message:`Invalid math: ${error.message}`},false);}
+      if(phase==='calibrating'&&!deskPalm){calibrator=newPalmCalibrator();update({tracking:'invalid',metrics:{...snapshot.metrics,rawEstimatedPipDeg:null,estimatedPipDeg:null,estimatedDipDeg:null,estimatedMcpProxyDeg:null},calibrationMessage:error.message,message:`Invalid math: ${error.message}`},false);}
       else{suspend(`Invalid math: ${error.message}`);update({tracking:'invalid'},false);}
     }
   }
   const controller:SessionController={
     frameBuffer,getSnapshot:()=>snapshot,
+    setDeskLayout(next){if(disposed)return;if(next!=='single'&&next!=='left_right')throw new Error('Invalid desk layout');layout=next;controller.selectExercise({exercise:'desk_tap',sensorMode:snapshot.selection.exercise==='desk_tap'?snapshot.selection.sensorMode as 'fused'|'kinematic_only':'fused'});update({deskLayout:layout});},
     tick(){
       if(disposed)return;
       const phase=machine.getState().phase,t=timeMs(now());
@@ -206,7 +221,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
       }
       if(lastTime>=0&&t-lastTime>FRAME_CONFIG.maxAgeMs){
         frameBuffer.current=null;display=null;
-        if(machine.getState().phase==='calibrating')calibrator=createPalmCalibrator(video);
+        if(machine.getState().phase==='calibrating')calibrator=newPalmCalibrator();
         update({tracking:'invalid',calibrationMessage:snapshot.calibrationStatus==='collecting'?'Stalled input; calibration window reset.':snapshot.calibrationMessage,metrics:{...snapshot.metrics,rawEstimatedPipDeg:null,estimatedPipDeg:null,estimatedDipDeg:null,estimatedMcpProxyDeg:null}},false);
       }
       machine.send('tick');
@@ -228,7 +243,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
     },
     beginTimingPair(){
       if(disposed||!timingCalibration||pairStart!==null||pairs.length>=FUSION_CONFIG.maxPairs||live&&snapshot.audio.state!=='ready')return;
-      pairStart=now();pairVisuals=[];pairAudios=[];deskDetector=createDeskVisualDetector(timingCalibration);
+      pairStart=now();pairVisuals=[];pairAudios=[];deskDetector=makeDeskDetector(timingCalibration);
       update({fusion:{...snapshot.fusion,timingRecording:true},calibrationMessage:'Do one spaced lift/tap/return. Wait 250 ms after return, then save. Avoid speech or other impacts.'});
     },
     saveTimingPair(){
@@ -260,24 +275,24 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
         if(disposed||generation!==token)return;
         if(live){
           const media=adapter.getVideo?.();if(!media)throw new Error('Prepared camera has no video source');
-          video={width:media.videoWidth,height:media.videoHeight};frameBuffer.video=video;frameBuffer.media=media;calibrator=createPalmCalibrator(video);
+          video={width:media.videoWidth,height:media.videoHeight};frameBuffer.video=video;frameBuffer.media=media;calibrator=newPalmCalibrator();
         }
-        machine.send('prepared');update({diagnostics:{...diagnostics,...adapter.getDiagnostics?.()},message:live?'Camera ready. Hold one open palm still, then calibrate.':'Synthetic adapter ready. Calibrate to play the input fixture.'});
+        machine.send('prepared');update({diagnostics:{...diagnostics,...adapter.getDiagnostics?.()},message:live?(snapshot.selection.exercise==='desk_tap'?'Camera ready. Hold your hand still and fully in view, then calibrate.':'Camera ready. Hold one open palm still, then calibrate.'):'Synthetic adapter ready. Calibrate to play the input fixture.'});
         if(live)adapter.play(event=>{if(!disposed&&generation===token)receive(event);});
       }catch(error){if(!disposed&&generation===token)fail(error instanceof Error?error.message:'Adapter preparation failed');}
     },
     calibrate(){
       if(disposed||collector!==null||!['ready','calibrated','complete'].includes(machine.getState().phase))return;
       if(snapshot.selection.exercise==='desk_tap'&&live&&snapshot.selection.sensorMode==='fused'&&snapshot.audio.state!=='ready'){update({calibrationStatus:'unavailable',message:'Start microphone separately and complete quiet calibration, or explicitly select kinematic-only.'});return;}
-      const token=live?generation:++generation;if(!live)adapter.stop();clear();audio?.reset();machine.send('calibrate');
-      update({result:null,calibration:null,calibrationStatus:'collecting',air:null,desk:null,target:null,metrics:initialSnapshot(adapter.source).metrics,diagnostics:{...snapshot.diagnostics,replayFrames:0},message:`Collecting three seconds of stable ${label.toLowerCase()} open-palm input.`});
+      const token=live?generation:++generation;if(!live)adapter.stop();clear();machine.send('calibrate');
+      update({result:null,calibration:null,calibrationStatus:'collecting',air:null,desk:null,target:null,metrics:initialSnapshot(adapter.source).metrics,diagnostics:{...snapshot.diagnostics,replayFrames:0},message:`Collecting three seconds of stable ${label.toLowerCase()} ${snapshot.selection.exercise==='desk_tap'?'palm geometry':'open-palm input'}.`});
       if(live)return;
       if(snapshot.selection.exercise==='air_targets')matcher=createCoincidenceMatcher(SYNTHETIC_AUDIO_OFFSET_MS,{startMs:now(),endMs:now()+60000});
       try{adapter.play(event=>{if(!disposed&&generation===token)receive(event);});}catch(error){fail(error instanceof Error?error.message:'Adapter playback failed');}
     },
     cancelCalibration(){
       if(disposed||!['calibrating','calibrated','countdown','running','complete'].includes(machine.getState().phase))return;
-      finishTrial(true);if(!live){generation++;adapter.stop();}clear();audio?.reset();machine.send('cancel');
+      finishTrial(true);if(!live){generation++;adapter.stop();}clear();machine.send('cancel');
       update({calibration:null,calibrationStatus:'not_started',calibrationMessage:'Cancelled; all pending calibration/dwell/contact state cleared.',air:null,desk:null,target:null,metrics:initialSnapshot(adapter.source).metrics,message:'Cancelled. Recalibrate for a fresh trial.'});
     },
     placeDeskRing(point,viewport){
@@ -286,7 +301,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
       if(!center){update({calibrationMessage:'Click inside the video, outside the letterbox.'});return;}
       try{
         const region={center,radiusPixels:deskPalm!.palmPixels*DESK_CONFIG.ringRadiusPalmUnits};
-        const palm=deskPalm!,next=createDeskCalibrator(palm,region);clearDesk();deskPalm=palm;
+        const palm=deskPalm!,next=createDeskCalibrator(palm,region),saved=savedPads;clearDesk();savedPads=saved;deskPalm=palm;
         // Preserve the palm owner while replacing all ring-dependent state.
         deskCalibrator=next;
         deskUpdate({placing:false,region,setup:next.getState(),visual:null,visualCandidateCount:0,lastCandidate:null});
@@ -297,13 +312,19 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
     beginDeskCycle(){if(!freshDeskCommand()||!deskCalibrator)return;const setup=deskCalibrator.beginCycle();deskUpdate({setup});update({calibrationMessage:setup.reason});},
     saveDeskCycle(){if(!freshDeskCommand()||!deskCalibrator)return;const setup=deskCalibrator.finishCycle();deskUpdate({setup});update({calibrationMessage:setup.reason});},
     finishDeskCalibration(){
-      if(!freshDeskCommand()||!deskCalibrator)return;
+      if(!freshDeskCommand()||!deskCalibrator||layout==='left_right'&&savedPads.length>=2)return;
       const setup=deskCalibrator.finish();
       if(setup.stage==='invalid'){suspend(`Desk calibration rejected: ${setup.reason}. Recalibrate.`);return;}
       deskUpdate({setup});
       if(!setup.calibration){update({calibrationMessage:setup.reason});return;}
+      if(layout==='left_right'){
+        if(savedPads.length===1){try{validateDeskPads(savedPads[0]!,setup.calibration);}catch(error){if(!(error instanceof MathInputError))throw error;deskCalibrator=null;deskUpdate({placing:true,setup:null,region:null});update({calibrationMessage:error.message});return;}}
+        savedPads.push(setup.calibration);
+        deskUpdate({pads:savedPads.map((cal,i)=>({id:i===0?'left':'right',region:{...cal.desk.region,center:sourcePixel(cal.desk.region.center.x,cal.desk.region.center.y)}}))});
+        if(savedPads.length===1){deskCalibrator=null;deskUpdate({placing:true,region:null,setup:null});update({calibrationMessage:'Left pad saved. Move to the RIGHT side of the video, click under the resting fingertip, then capture rest and 3–5 cycles again.'});return;}
+      }
       if(snapshot.selection.sensorMode==='fused'){
-        timingCalibration=setup.calibration;deskDetector=createDeskVisualDetector(setup.calibration);pairs=[];
+        timingCalibration=setup.calibration;deskDetector=makeDeskDetector(setup.calibration);pairs=[];
         update({fusion:{...snapshot.fusion,timingRequired:true},calibrationMessage:'Visual geometry ready. Record 3–5 additional single spaced timing taps; one visual and one audio onset per recording.',message:'Guided audio/visual timing calibration required.'});return;
       }
       deskPalm=null;machine.send('calibrated');
@@ -322,9 +343,9 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
           frameBuffer.target=null;update({air:air.getState(),metrics:{...snapshot.metrics,acceptedCount:0}});
         }else if(calibration.exercise==='desk_tap'){
           if(live&&calibration.sensorMode==='fused'&&snapshot.audio.state!=='ready'){suspend('Microphone is not calibrated; restart setup.');return;}
-          deskDetector=createDeskVisualDetector(calibration);
+          deskDetector=makeDeskDetector(calibration);
           matcher?.reset();matcher=null;
-          snapshot={...snapshot,fusion:emptyFusion()};deskUpdate({visual:deskDetector.getState(),visualCandidateCount:0,lastCandidate:null,acceptedTapCount:0,lastAccepted:null});
+          snapshot={...snapshot,fusion:emptyFusion()};deskUpdate({visual:deskDetector.getState(),visualCandidateCount:0,lastCandidate:null,acceptedTapCount:0,lastAccepted:null,leftTapCount:0,rightTapCount:0});
         }else return;
         machine.send('start');
         trialStart=machine.getState().countdownEndsAtMs!;collector=createTelemetryCollector(calibration,adapter.source,crypto.randomUUID(),trialStart);
@@ -347,7 +368,7 @@ export function createSessionController(adapter:SessionAdapter,checkAssets?:()=>
       }else{controller.reset();update({result,selection,message:'Selection changed; calibration and counters cleared.'});}
 
     },
-    dispose(){if(disposed)return;disposed=true;generation++;audioGeneration++;adapter.dispose();audio?.dispose();clear();frameBuffer.media=null;listeners.clear();},
+    dispose(){if(disposed)return;disposed=true;generation++;audioGeneration++;adapter.dispose();audio?.dispose();clear();frameBuffer.media=null;listeners.clear();frameListeners.clear();},
   };
   return controller;
 }

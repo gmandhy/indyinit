@@ -5,12 +5,12 @@ import type { AudioAdapter,AudioDiagnostics,AudioEvent } from '../../adapters/au
 import { handFrame } from './helpers';
 import { createReplayAdapter } from '../../adapters/replay';
 function fixture(){
-  let time=0,sequence=0,audioSequence=0,sink:(event:AdapterEvent)=>void=()=>{},audioSink:(event:AudioEvent)=>void=()=>{};
+  let shift=0,time=0,sequence=0,audioSequence=0,sink:(event:AdapterEvent)=>void=()=>{},audioSink:(event:AudioEvent)=>void=()=>{};
   const ready:AudioDiagnostics={state:'ready',message:'Artificial quiet calibration',sampleRate:48000,settings:'synthetic',clock:{audioTimeSeconds:0,sessionTimeMs:0,uncertaintyMs:3},level:null};
   const audio:AudioAdapter={start:async emit=>{audioSink=emit;emit({type:'audio_status',diagnostics:ready});},reset:vi.fn(),stop:vi.fn(),dispose:vi.fn(),getDiagnostics:()=>ready};
   const adapter:SessionAdapter={source:'live',prepare:async()=>{},play:emit=>{sink=emit;},getVideo:()=>({videoWidth:1000,videoHeight:1000}) as HTMLVideoElement,stop:vi.fn(),dispose:vi.fn()};
   const c=createSessionController(adapter,undefined,()=>time,undefined,audio);
-  function frame(lift=0){time+=50;const f=handFrame(time,sequence++);sink({type:'frame',sample:{...f,imageLandmarks:f.imageLandmarks.map((p,i)=>i===8?{...p,y:p.y-lift/1000}:p)}});}
+  function frame(lift=0){time+=50;const f=handFrame(time,sequence++);sink({type:'frame',sample:{...f,imageLandmarks:f.imageLandmarks.map((p,i)=>({...p,x:p.x+shift/1000,y:p.y-(i===8?lift/1000:0)}))}});}
   function impulse(t:number,seq=audioSequence++){audioSink({type:'audio',impulse:{sequence:seq,sampleTimeMs:t,rms:.2}});}
   async function visualSetup(){c.selectExercise({exercise:'desk_tap',sensorMode:'fused'});await c.startDevices();await c.startMicrophone();c.calibrate();for(let i=0;i<=60;i++)frame();c.placeDeskRing({x:500,y:665},{width:1000,height:1000});c.captureDeskRest();for(let i=0;i<=10;i++)frame();for(let i=0;i<3;i++){c.beginDeskCycle();for(const lift of [0,0,0,15,30,30,15,0,0,0])frame(lift);c.saveDeskCycle();}c.finishDeskCalibration();}
   function pair(order:'audio'|'visual'='audio',duplicate=false){
@@ -21,11 +21,12 @@ function fixture(){
   }
   async function calibrated(){await visualSetup();for(let i=0;i<3;i++)pair(i%2?'visual':'audio');c.finishTimingCalibration();}
   function countdown(){c.startExercise();for(let i=0;i<60;i++)frame();}
-  return {c,audio,adapter,frame,impulse,pair,visualSetup,calibrated,countdown,now:()=>time,setTime:(t:number)=>{time=t;},status:(state:AudioDiagnostics['state'])=>audioSink({type:'audio_status',diagnostics:{...ready,state}})};
+  return {c,audio,adapter,setShift:(next:number)=>{shift=next;},frame,impulse,pair,visualSetup,calibrated,countdown,now:()=>time,setTime:(t:number)=>{time=t;},status:(state:AudioDiagnostics['state'])=>audioSink({type:'audio_status',diagnostics:{...ready,state}})};
 }
 describe('audio / visual controller orchestration (artificial devices only)',()=>{
   it('requires distinct quiet and paired calibration; learns real supplied offset and rejects ambiguous windows',async()=>{
     const h=fixture();await h.visualSetup();expect(h.c.getSnapshot()).toMatchObject({phase:'calibrating',calibration:null,fusion:{timingRequired:true}});
+    expect(h.audio.reset).not.toHaveBeenCalled(); // palm setup preserves completed quiet calibration
     h.pair('audio',true);expect(h.c.getSnapshot()).toMatchObject({fusion:{timingPairs:0,timingRecording:false},calibrationMessage:expect.stringContaining('Ambiguous')});
     for(let i=0;i<3;i++)h.pair();h.c.finishTimingCalibration();
     expect(h.c.getSnapshot()).toMatchObject({phase:'calibrated',calibration:{sensorMode:'fused',audio:{offsetMs:25,residualSpreadMs:0}}});h.c.dispose();
@@ -33,9 +34,38 @@ describe('audio / visual controller orchestration (artificial devices only)',()=
   it.each(['audio','visual'] as const)('fuses %s-first exactly once; keeps counts distinct and rejects delayed callbacks after reset',async order=>{
     const h=fixture();await h.calibrated();h.countdown();h.frame(30);h.frame(15);h.frame();const contact=h.now();
     h.setTime(contact+25);if(order==='audio')h.impulse(contact+25,10);h.frame();if(order==='visual')h.impulse(contact+25,10);
-    expect(h.c.getSnapshot()).toMatchObject({phase:'running',metrics:{acceptedCount:null},fusion:{visualCount:1,audioCount:1,fusedCount:1,lastFused:{deltaMs:0}},desk:{visualCandidateCount:1,acceptedTapCount:1,lastAccepted:{mode:'fused'}}});
+    expect(h.c.getSnapshot()).toMatchObject({phase:'running',metrics:{acceptedCount:null},fusion:{visualCount:1,audioCount:1,fusedCount:1,lastFused:{deltaMs:0}},desk:{visualCandidateCount:1,acceptedTapCount:1,lastAccepted:{mode:'fused',position:{x:500,y:665}}}});
     h.impulse(contact+25,10);for(let i=0;i<5;i++)h.frame();expect(h.c.getSnapshot().fusion.fusedCount).toBe(1);
     h.c.reset();h.impulse(contact+25,11);expect(h.c.getSnapshot()).toMatchObject({phase:'idle',calibration:null,fusion:{fusedCount:0}});expect(h.audio.stop).toHaveBeenCalled();h.c.dispose();expect(h.audio.dispose).toHaveBeenCalled();
+  });
+  it.each(['audio','visual'] as const)('recognizes alternating LEFT/RIGHT pads with %s-first delivery and unique cycles',async order=>{
+    const h=fixture();h.c.setDeskLayout('left_right');await h.visualSetup();
+    expect(h.c.getSnapshot()).toMatchObject({deskLayout:'left_right',phase:'calibrating',desk:{placing:true,pads:[{id:'left'}]},fusion:{timingRequired:false}});
+    h.setShift(-250);h.frame();h.c.placeDeskRing({x:750,y:665},{width:1000,height:1000});h.c.captureDeskRest();
+    for(let i=0;i<=10;i++)h.frame();
+    for(let i=0;i<3;i++){h.c.beginDeskCycle();for(const lift of [0,0,0,15,30,30,15,0,0,0])h.frame(lift);h.c.saveDeskCycle();}
+    h.c.finishDeskCalibration();expect(h.c.getSnapshot()).toMatchObject({desk:{pads:[{id:'left'},{id:'right'}]},fusion:{timingRequired:true}});
+    for(let i=0;i<3;i++){h.setShift(i%2?-250:0);h.pair();}
+    h.c.finishTimingCalibration();expect(h.c.getSnapshot().phase).toBe('calibrated');h.countdown();
+    for(const [i,shift] of [0,-250,0,-250].entries()){
+      h.setShift(shift);h.frame();h.frame(30);h.frame(15);h.frame();const contact=h.now();h.setTime(contact+25);
+      if(order==='audio')h.impulse(contact+25,100+i);h.frame();if(order==='visual')h.impulse(contact+25,100+i);
+      expect(h.c.getSnapshot()).toMatchObject({phase:'running',desk:{acceptedTapCount:i+1,lastAccepted:{pad:shift===0?'left':'right',position:{x:500+shift,y:665}}}});
+      h.impulse(contact+25,100+i);for(let j=0;j<4;j++)h.frame();
+      expect(h.c.getSnapshot().desk?.acceptedTapCount).toBe(i+1);
+    }
+    expect(h.c.getSnapshot().desk).toMatchObject({leftTapCount:2,rightTapCount:2});
+    h.c.setDeskLayout('single');expect(h.c.getSnapshot()).toMatchObject({deskLayout:'single',calibration:null,desk:null,fusion:{fusedCount:0}});h.c.dispose();
+  });
+  it('preserves microphone readiness across visual calibration loss and cancellation',async()=>{
+    const h=fixture();await h.visualSetup();
+    // A healthy microphone does not need a new quiet interval when the camera becomes stale.
+    h.setTime(h.now()+121);h.c.tick();
+    expect(h.c.getSnapshot()).toMatchObject({phase:'ready',calibration:null,desk:null,audio:{state:'ready'},fusion:{timingPairs:0}});
+    expect(h.audio.reset).not.toHaveBeenCalled();
+    h.frame();h.c.calibrate();for(let i=0;i<=60;i++)h.frame();h.c.cancelCalibration();
+    expect(h.c.getSnapshot().audio.state).toBe('ready');expect(h.audio.reset).not.toHaveBeenCalled();
+    h.impulse(NaN);expect(h.audio.reset).toHaveBeenCalledTimes(1);h.c.dispose();
   });
   it('microphone loss aborts fused mode, preserves camera owner and requires explicit kinematic selection',async()=>{
     const h=fixture();await h.calibrated();h.countdown();h.status('unavailable');

@@ -11,8 +11,9 @@ class TapProcessor extends AudioWorkletProcessor {
   private epoch=0;
   private lastMeter=-Infinity;
   private failed=false;
+  private nextFrame:number|null=null;
   constructor(){super();this.port.onmessage=(e:MessageEvent<TapProcessorCommand>)=>{
-    if(e.data.type==='reset'&&Number.isSafeInteger(e.data.epoch)&&e.data.epoch>=0){this.epoch=e.data.epoch;this.detector=createAcousticDetector(sampleRate);this.failed=false;this.lastMeter=-Infinity;}
+    if(e.data.type==='reset'&&Number.isSafeInteger(e.data.epoch)&&e.data.epoch>=0){this.epoch=e.data.epoch;this.detector=createAcousticDetector(sampleRate);this.failed=false;this.nextFrame=null;this.lastMeter=-Infinity;}
   };}
   private post(message:TapProcessorMessage){this.port.postMessage(message);}
   process(inputs:Float32Array[][],outputs:Float32Array[][]):boolean {
@@ -21,6 +22,12 @@ class TapProcessor extends AudioWorkletProcessor {
     const input=inputs[0]?.[0];
     try{
       if(!input?.length)throw new Error('missing_input: microphone supplied no samples');
+      // The browser may skip render quanta while attaching a newly started input.
+      // Restart the full quiet interval during startup; a gap after readiness still fails.
+      if(this.nextFrame!==null&&currentFrame!==this.nextFrame&&this.detector.getState().phase==='calibrating'){
+        this.detector=createAcousticDetector(sampleRate);this.lastMeter=-Infinity;
+      }
+      this.nextFrame=currentFrame+input.length;
       for(const impulse of this.detector.process(input,currentFrame))this.post({type:'impulse',epoch:this.epoch,impulse});
       const status=this.detector.getState(),sampleTimeMs=(currentFrame+input.length)/sampleRate*1000;
       if(status.phase==='failed')throw new Error(status.reason);

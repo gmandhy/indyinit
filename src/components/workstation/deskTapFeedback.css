@@ -1,0 +1,23 @@
+.desk-feedback { margin-block: 20px; }
+.desk-feedback .section-heading { flex-wrap: wrap; gap: 10px; }
+.desk-steps { padding-left: 24px; color: var(--muted, #625b66); }
+.desk-steps li { margin-block: 8px; }
+.desk-steps [aria-current="step"] { color: #006f60; font-weight: 700; }
+.desk-microphone { padding: 16px; background: #f2f8f6; border-radius: 12px; }
+.desk-microphone label { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.desk-microphone meter { width: min(100%, 320px); height: 24px; }
+.desk-microphone small { display: block; margin-top: 8px; }
+.desk-event-counts { display: flex; flex-wrap: wrap; gap: 16px 40px; }
+.desk-event-counts dd { margin: 6px 0; font-size: 2rem; font-weight: 700; color: #006f60; }
+.desk-feedback > small { display: block; margin-top: 8px; }
+.desk-wizard { align-self: start; }
+.desk-wizard h2:focus { outline: none; }
+.desk-step-success { padding: 16px; margin-block: 16px; border-radius: 12px; background: #e8f6ef; color: #075f46; border: 1px solid #b9dfcd; }
+.desk-step-success p { margin-bottom: 0; }
+.desk-step-actions, .desk-step-navigation { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.desk-step-actions > p, .desk-step-actions > progress { width: 100%; }
+.desk-step-navigation { margin-block: 20px; }
+.desk-placement-hint { padding: 16px; background: #f2f8f6; border-radius: 12px; }
+.desk-step-message { overflow-wrap: anywhere; }
+.desk-advanced { margin-block: 20px; }
+.desk-advanced summary { cursor: pointer; padding: 12px; font-weight: 600; }

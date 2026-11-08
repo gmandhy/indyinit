@@ -83,6 +83,8 @@ Validate exactly 21 finite landmarks per present hand. Topology: wrist 0; thumb 
 
 Collect **three seconds of valid stable open-palm observations**, with enough samples at the measured frame rate (initial minimum 45). Restart the window on tracking loss or excessive variation. Use robust medians and report insufficient size, unstable pose, or occlusion rather than accepting bad data.
 
+For desk setup, use the same stable-observation, visibility, size, scale, wrist-drift and orientation requirements to calibrate palm geometry, without the absolute PIP/DIP open-finger gate. This step does not verify an open-hand posture or correct joint-angle error; desk contact/rest/motion are calibrated separately. Air mode retains its provisional open-finger posture check.
+
 Keep two scales: `palmWorld` = median ||world[9]-world[0]||, and `palmPixels` = median ||pixel[9]-pixel[0]||. The former normalizes within-hand ratios; the latter sizes on-screen targets. Both must be finite and nonzero. Small-image and stability thresholds are named pixel/ratio configuration values validated on hardware, not a universal `0.01` distance test. Freeze calibration during a trial; require recalibration after major camera/hand-distance change. This does not make targets perfectly invariant to perspective or distance.
 
 ### 3.3 Joint angles
@@ -117,6 +119,12 @@ Targets are **2D screen-space circles** with ID, offset from calibrated wrist in
 Use an oblique camera view showing the fingertip's lift and return; a top-down view may hide vertical motion. The operator places a visible target ring on the imaged desk under the index finger. Collect a resting fingertip location plus 3–5 guided lifts/taps to estimate image-space motion direction, contact band, amplitude, timing offset, and wrist motion tolerance. Reject a setup with insufficient projected motion rather than pretending image Y is always vertical. Store calibration for that fixed camera/desk position. No metric plane reconstruction is implied.
 
 The core desk interaction is one ring that flashes and increments exactly once per accepted tap; moving between several desk pads is stretch scope. At contact, the fingertip must lie in the target region and calibrated contact band. Lift/release is required before the next score; a 250 ms dwell is **not** required for a tap. Show visual candidate, acoustic impulse, and fused acceptance distinctly in debug mode. No audio feedback while listening by default, to avoid triggering on the app's own sounds.
+
+#### User-authorized two-pad extension (2026-11-07)
+
+The tracked trial may explicitly select `left_right` desk layout. Calibrate Left then Right separately using the same palm/hand/camera owner and the existing rest plus 3–5 lift/return cycles per pad; reject overlapping rings and labels reversed in the mirrored display. Each pad keeps its own contact axis, band, excursion, and wrist-rest baseline. Record the shared microphone timing offset with 3–5 alternating-pad timing taps. Do not infer a contact plane for the rest of the desk.
+
+Route observations to a calibrated pad only when the fingertip is within that pad's lift corridor and the wrist is near that pad's measured rest. Travel clears pending contact and requires a new lift/return at the destination; travel alone does not invalidate the other pad. Tracking/hand/camera/scale failures still invalidate calibration. Give candidate contact cycles unique IDs across pads, preserve the extremum position and pad identity through symmetric audio matching, and flash/count only the matched pad. UI shows both rings, per-pad counts, and last matched side; existing summary export uses combined counts. Single-ring behavior remains independently available. This extension is software-tested; live multi-pad accuracy remains a separate gate.
 
 ### 4.3 State machines
 

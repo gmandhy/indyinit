@@ -9,7 +9,8 @@ export const FRAME_CONFIG = Object.freeze({ maxAgeMs:120, maxGapMs:120 });
 export const CALIBRATION_CONFIG = Object.freeze({
   durationMs:3000, minSamples:45, maxBufferedSamples:600, minPalmPixels:40,
   maxScaleVariationRatio:.12, maxWristDriftPalmUnits:.2, maxOrientationDeviationDeg:8,
-  maxOpenFlexionDeg:20, minHandConfidence:.6, maxAgeMs:FRAME_CONFIG.maxAgeMs, maxGapMs:FRAME_CONFIG.maxGapMs,
+  // User-reported open palms can read about 25°; allow margin in this provisional pose gate.
+  maxOpenFlexionDeg:30, minHandConfidence:.6, maxAgeMs:FRAME_CONFIG.maxAgeMs, maxGapMs:FRAME_CONFIG.maxGapMs,
 });
 export const AIR_CONFIG = Object.freeze({ dwellMs:250, maxScaleChangeRatio:.25, maxReachPalmUnits:3 });
 export const SESSION_CONFIG = Object.freeze({ countdownMs:3000, trialMs:15000, deliveryGraceMs:250 });
@@ -41,7 +42,7 @@ export const DESK_CONFIG = Object.freeze({
 /** Rationale: 120 ms freshness/gap is a provisional inference-age budget; missing
  * observations cannot bridge dwell. Display smoothing may reset independently at
  * 150 ms. Calibration allows 12% scale variation and 0.2 palm units of image wrist
- * drift, with <=20° finger bends and <=8° world/image axis variation. The 40 px
+ * drift, with <=30° finger bends and <=8° world/image axis variation. The 40 px
  * minimum avoids accepting tiny projected palms. A 25% post-calibration scale
  * change invalidates the setup. None of these values establishes clinical accuracy.
  */

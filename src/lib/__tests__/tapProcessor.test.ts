@@ -10,10 +10,15 @@ it('runs the actual worklet with silent outputs, compact messages, throttled met
   try{
     await import('../../audio/tapProcessor');const processor=new Processor();let frame=0;
     function feed(n:number,amplitude=0){vi.stubGlobal('currentFrame',frame);const out=new Float32Array(n).fill(1);expect(processor.process([[new Float32Array(n).fill(amplitude)]],[[out]])).toBe(true);expect(out.every(v=>v===0)).toBe(true);frame+=n;}
-    for(let i=0;i<250;i++)feed(i%2?64:128); // exactly 1.5 s at 16 kHz
-    expect(messages.filter(m=>m.type==='level').length).toBeLessThanOrEqual(15);
+    feed(128);frame+=256;feed(128); // startup input gap restarts the quiet interval
+    expect(messages.filter(m=>m.type==='error')).toHaveLength(0);
+    for(let i=0;i<250;i++)feed(i%2?64:128); // 1.5 seconds of continuous quiet
+
+    expect(messages.filter(m=>m.type==='level').length).toBeLessThanOrEqual(17);
     feed(48,.3);feed(512);expect(messages.filter(m=>m.type==='impulse')).toHaveLength(1);
     expect(messages.every(m=>!JSON.stringify(m).includes('samples'))).toBe(true);
+    frame+=128;feed(128); // once ready, a lost quantum must invalidate capture
+    expect(messages.at(-1)).toMatchObject({type:'error',message:expect.stringContaining('Discontinuous')});
     port.onmessage?.({data:{type:'reset',epoch:2}});processor.process([],[[new Float32Array(16).fill(1)]]);
     expect(messages.at(-1)).toMatchObject({type:'error',epoch:2,message:expect.stringContaining('missing_input')});
     port.onmessage?.({data:{type:'reset',epoch:3}});feed(16,1);expect(messages.at(-1)).toMatchObject({type:'error',epoch:3,message:expect.stringContaining('clipped')});

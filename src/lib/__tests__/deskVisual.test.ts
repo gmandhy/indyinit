@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDeskPadDetector, validateDeskPads } from '../deskPads';
 import { createDeskCalibrator, createDeskVisualDetector } from '../deskVisual';
 import type { DeskCalibration } from '../deskVisual';
 import { createPalmCalibrator } from '../calibration';
@@ -70,6 +71,12 @@ describe('capture-time visual contact cycles',()=>{
     s.observe(30);s.observe(15);s.observe();expect(s.observe().candidates).toBe(2);
     const f=s.frame();s.d.observe(f,s.now());expect(s.d.observe(f,s.now())).toMatchObject({candidates:2,calibrationValid:false,reason:'stale'});
   });
+  it('retains the extremum location rather than the later confirmation-frame fingertip',()=>{
+    const s=detector();s.observe(30);s.observe(15);s.observe();
+    const capture=s.now(),f=s.frame();
+    const confirmation={...f,imageLandmarks:f.imageLandmarks.map((p,i)=>i===8?{...p,x:p.x+.002}:p)};
+    expect(s.d.observe(confirmation,s.now()).candidate).toMatchObject({captureTimeMs:capture,position:{x:500,y:665}});
+  });
   it('uses capture time despite delayed arrival and discards lookahead on cancellation/loss',()=>{
     const s=detector();s.observe(30,{},20);s.observe(15,{},10);s.observe(0,{},30);const contact=s.now();
     expect(s.observe(0,{},40).candidate?.captureTimeMs).toBe(contact);
@@ -118,5 +125,26 @@ describe('target/visual coordinate integration',()=>{
       const f=s.frame();engine.observe({...f,imageLandmarks:f.imageLandmarks.map((p,j)=>j===8?{...p,x:.1,y:.1}:p)});
     }
     expect(engine.getState()).toMatchObject({completedReps:3,attempts:3,requiresRelease:false});
+  });
+});
+
+describe('left/right pad boundaries',()=>{
+  function pads(){const s=setup(),left=s.calibrate(),right={...left,desk:{...left.desk,rest:{...left.desk.rest,x:250},wristRest:{...left.desk.wristRest,x:left.desk.wristRest.x-250},region:{...left.desk.region,center:{x:250,y:665}}}};return {s,left,right};}
+  it('rejects overlapping/reversed pads and mismatched camera/hand',()=>{
+    const {left,right}=pads();expect(()=>validateDeskPads(left,right)).not.toThrow();
+    expect(()=>validateDeskPads(right,left)).toThrow(/Left/);expect(()=>validateDeskPads(left,left)).toThrow(/separate/);
+    expect(()=>validateDeskPads(left,{...right,hand:'Left'})).toThrow(/same hand/);
+    expect(()=>validateDeskPads(left,{...right,desk:{...right.desk,contactDirection:{x:1,y:0}}})).toThrow(/lift paths overlap/);
+  });
+  it('does not turn lateral travel, contact holds, or a return without lift into a tap',()=>{
+    const {s,left,right}=pads(),d=createDeskPadDetector(left,right);
+    for(let i=0;i<10;i++){const f=s.frame();expect(d.observe(f,s.now()).candidate).toBeNull();}
+    for(const shift of [-50,-100,-150,-200,-250]){const f=s.frame(),moved={...f,imageLandmarks:f.imageLandmarks.map(p=>({...p,x:p.x+shift/1000}))};expect(d.observe(moved,s.now()).candidate).toBeNull();}
+    const f=s.frame();expect(d.observe(f,s.now()).candidate).toBeNull();
+    expect(d.observe(f,s.now())).toMatchObject({calibrationValid:false,reason:'stale_or_missing_frames'});
+  });
+  it('invalidates both pads on tracking loss rather than assigning a sound to a stale position',()=>{
+    const {s,left,right}=pads(),d=createDeskPadDetector(left,right),f=s.frame();d.observe(f,s.now());
+    expect(d.observe({validity:'absent',selectedHand:'Right',sequence:f.sequence+1,captureTimeMs:f.captureTimeMs+50,reason:'no_hand'},s.now()+50)).toMatchObject({calibrationValid:false,candidate:null});
   });
 });

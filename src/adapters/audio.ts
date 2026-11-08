@@ -31,11 +31,17 @@ export function createAudioAdapter(environment?:AudioEnvironment):AudioAdapter {
     const old=context;context=null;if(old){old.onstatechange=null;void old.close().catch(()=>{/* already closed; no media survives */});}
   }
   function unavailable(message:string){release();diagnostics={...diagnostics,state:'unavailable',message,clock:null,level:null};publish();}
+  function readClock():AudioClockAnchor|null {
+    if(!context)return null;
+    // Bracket the rendering clock. Speaker playback timestamps would introduce
+    // output latency into this input path; paired taps calibrate input latency instead.
+    const before=env.now(),audioTimeSeconds=context.currentTime,after=env.now();
+    return {audioTimeSeconds,sessionTimeMs:(before+after)/2,uncertaintyMs:(after-before)/2};
+  }
   function reset(){
     epoch++;diagnostics={...diagnostics,level:null};
     if(context?.state==='running'&&node){
-      const before=env.now(),audioTimeSeconds=context.currentTime,after=env.now();
-      diagnostics={...diagnostics,state:'calibrating',message:'Keep quiet for 1.5 seconds.',clock:{audioTimeSeconds,sessionTimeMs:(before+after)/2,uncertaintyMs:(after-before)/2}};
+      diagnostics={...diagnostics,state:'calibrating',message:'Keep quiet for 1.5 seconds.',clock:readClock()};
       const command:TapProcessorCommand={type:'reset',epoch};node.port.postMessage(command);publish();
     }
   }
@@ -72,15 +78,22 @@ export function createAudioAdapter(environment?:AudioEnvironment):AudioAdapter {
         node=env.node(owned);source=owned.createMediaStreamSource(stream!);
         node.port.onmessage=(event:MessageEvent<TapProcessorMessage>)=>{
           if(disposed||generation!==token||event.data.epoch!==epoch)return;
-          const data=event.data,anchor=diagnostics.clock;if(!anchor)return;
+          const data=event.data;
           if(data.type==='error'){unavailable(`Audio calibration/capture failed: ${data.message}. Retry microphone; kinematic-only requires explicit selection.`);return;}
           if(data.type==='level'){
-            // Render-quantum clock can lead performance by one block. Detect substantial drift;
-            // do not silently rewrite timestamps while queues contain calibrated events.
-            const drift=Math.abs((owned!.currentTime-anchor.audioTimeSeconds)*1000-(env.now()-anchor.sessionTimeMs));
-            if(drift>AUDIO_CONFIG.maxClockDriftMs){unavailable('Audio clock discontinuity; restart and recalibrate timing.');return;}
-            diagnostics={...diagnostics,blockFrames:data.blockFrames,clock:{...anchor,uncertaintyMs:Math.max(anchor.uncertaintyMs,data.blockFrames/owned!.sampleRate*1000)},state:data.status.phase==='ready'?'ready':'calibrating',message:data.status.reason,level:data.status};publish();return;
+            const measured=readClock();
+            if(!measured)return;
+            const clock={...measured,uncertaintyMs:Math.max(measured.uncertaintyMs,data.blockFrames/owned!.sampleRate*1000)};
+            const anchor=diagnostics.clock;
+            if(anchor&&diagnostics.state==='ready'){
+              const drift=Math.abs((clock.sessionTimeMs-anchor.sessionTimeMs)-(clock.audioTimeSeconds-anchor.audioTimeSeconds)*1000);
+              if(drift>AUDIO_CONFIG.maxClockDriftMs){unavailable('Audio clock discontinuity; restart and recalibrate timing.');return;}
+            }
+            // Startup clock pairs may settle during the quiet interval. Freeze the mapping
+            // once ready: paired calibration and queued events must share the same anchor.
+            diagnostics={...diagnostics,blockFrames:data.blockFrames,clock:diagnostics.state==='ready'?anchor:clock,state:data.status.phase==='ready'?'ready':'calibrating',message:data.status.reason,level:data.status};publish();return;
           }
+          const anchor=diagnostics.clock;if(!anchor||diagnostics.state!=='ready')return;
           const impulse={...data.impulse,sampleTimeMs:anchor.sessionTimeMs+(data.impulse.sampleTimeMs-anchor.audioTimeSeconds*1000)};
           if(!AudioImpulseSchema.safeParse(impulse).success||impulse.sampleTimeMs>env.now()){unavailable('Invalid/future sample-clock audio event; restart microphone and recalibrate.');return;}
           emit({type:'audio',impulse});

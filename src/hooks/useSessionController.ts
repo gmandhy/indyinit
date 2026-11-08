@@ -24,6 +24,7 @@ export function useSessionController(source: 'live' | 'synthetic_replay' = 'live
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange',visibility); unsubscribe(); abort.abort(); owned.dispose(); controller.current = null; frameBuffer.current = { current: null }; };
   }, [source]);
   const commands = useMemo<ControllerCommands>(() => ({
+    setDeskLayout:layout=>controller.current?.setDeskLayout(layout),
     replayTap:()=>controller.current?.replayTap(),
     tick:()=>controller.current?.tick(), setHidden:hidden=>controller.current?.setHidden(hidden),
     startDevices: async () => { await controller.current?.startDevices(); },

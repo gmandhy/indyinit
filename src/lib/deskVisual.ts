@@ -142,7 +142,7 @@ export function createDeskCalibrator(input:AirCalibration,region:DeskRegion) {
   };
 }
 
-export interface VisualCandidate { readonly sequence:number; readonly cycle:number; readonly captureTimeMs:number; readonly observedAtMs:number }
+export interface VisualCandidate { readonly sequence:number; readonly cycle:number; readonly captureTimeMs:number; readonly observedAtMs:number; readonly position?:SourcePixel; readonly pad?:'left'|'right' }
 export interface DeskVisualState {
   readonly phase:'released'|'lifted'|'descending'|'contactCandidate'; readonly reason:string;
   readonly calibrationValid:boolean; readonly qPalmUnits:number|null; readonly velocityPalmUnitsPerSecond:number|null;
@@ -188,7 +188,7 @@ export function createDeskVisualDetector(input:Extract<Calibration,{exercise:'de
         if(o.time-pending!.enteredMs>C.maxConfirmationMs)return reset('unconfirmed_contact');
         if(q>pending!.q){pending={...pending!,extremum:o,q};}
         if(v!==null&&v<=C.extremumSpeedPalmUnitsPerSecond){
-          const candidate={sequence:pending!.extremum.sample.sequence,cycle,captureTimeMs:pending!.extremum.time,observedAtMs:nowMs};
+          const candidate={sequence:pending!.extremum.sample.sequence,cycle,captureTimeMs:pending!.extremum.time,observedAtMs:nowMs,position:pending!.extremum.tip};
           pending=null;state={...state,phase:'released',reason:'Visual candidate; lift to rearm.',candidates:state.candidates+1,candidate};
         }
         return state;

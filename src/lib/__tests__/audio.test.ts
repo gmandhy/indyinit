@@ -21,11 +21,27 @@ describe('owned microphone capture lifecycle (fake devices, no hardware evidence
     expect(h.context.resume).toHaveBeenCalledTimes(1);expect(h.media.getUserMedia).toHaveBeenCalledWith({video:false,audio:{channelCount:{ideal:1},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     await pending;expect(h.adapter.getDiagnostics()).toMatchObject({state:'calibrating',sampleRate:44100,clock:{audioTimeSeconds:.5,sessionTimeMs:1000}});
     expect(h.adapter.getDiagnostics().settings).toContain('"echoCancellation":true');expect(h.adapter.getDiagnostics().settings).not.toContain('never-display');
+    h.message({type:'level',blockFrames:128,status:{phase:'ready',reason:'Quiet',rms:0,noiseRms:0,thresholdRms:.04,elapsedMs:1500}});
     h.setTime(1100);h.message({type:'impulse',impulse:{sequence:0,sampleTimeMs:550,rms:.2}});
     expect(h.events.at(-1)).toEqual({type:'audio',impulse:{sequence:0,sampleTimeMs:1050,rms:.2}});
     const old=h.epoch();h.adapter.reset();const n=h.events.length;h.node.port.onmessage?.({data:{type:'impulse',epoch:old,impulse:{sequence:1,sampleTimeMs:600,rms:.2}}});expect(h.events).toHaveLength(n);
     h.adapter.stop();expect(h.track.stop).toHaveBeenCalledTimes(1);expect(h.node.disconnect).toHaveBeenCalled();expect(h.source.disconnect).toHaveBeenCalled();expect(h.node.port.close).toHaveBeenCalled();expect(h.context.close).toHaveBeenCalled();
     expect(h.media.removeEventListener).toHaveBeenCalledWith('devicechange',expect.any(Function));h.adapter.dispose();
+  });
+  it('lets startup clocks settle during quiet calibration, then freezes the ready mapping',async()=>{
+    const h=harness();await h.adapter.start(e=>h.events.push(e));
+    h.setTime(1200);h.context.currentTime=.51;
+    h.message({type:'level',blockFrames:128,status:{phase:'calibrating',reason:'Quiet'}});
+    expect(h.adapter.getDiagnostics()).toMatchObject({state:'calibrating',clock:{audioTimeSeconds:.51,sessionTimeMs:1200}});
+    h.setTime(2700);h.context.currentTime=2;
+    h.message({type:'level',blockFrames:128,status:{phase:'ready',reason:'Ready'}});
+    const anchor=h.adapter.getDiagnostics().clock;
+    h.setTime(2800);h.context.currentTime=2.1;
+    h.message({type:'level',blockFrames:128,status:{phase:'ready',reason:'Ready'}});
+    expect(h.adapter.getDiagnostics().clock).toEqual(anchor);
+    h.message({type:'impulse',impulse:{sequence:0,sampleTimeMs:2050,rms:.2}});
+    expect(h.events.at(-1)).toEqual({type:'audio',impulse:{sequence:0,sampleTimeMs:2750,rms:.2}});
+    h.adapter.dispose();
   });
   it('closes a context immediately and stops late permission tracks after stop/dispose/restart',async()=>{
     for(const action of ['stop','dispose'] as const){
@@ -56,7 +72,7 @@ describe('owned microphone capture lifecycle (fake devices, no hardware evidence
       if(failure==='device')h.media.addEventListener.mock.calls[0]![1]();
       if(failure==='ended')h.track.addEventListener.mock.calls[0]![1]();
       if(failure==='dsp')h.message({type:'error',message:'noisy_calibration'});
-      if(failure==='clock'){h.setTime(1200);h.message({type:'level',sampleTimeMs:600,status:{phase:'ready'}});}
+      if(failure==='clock'){h.message({type:'level',blockFrames:128,status:{phase:'ready'}});h.setTime(1200);h.message({type:'level',sampleTimeMs:600,status:{phase:'ready'}});}
       expect(h.adapter.getDiagnostics()).toMatchObject({state:'unavailable',clock:null});expect(h.track.stop).toHaveBeenCalledTimes(1);expect(h.context.close).toHaveBeenCalled();
     }
   });

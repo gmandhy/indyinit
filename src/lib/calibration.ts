@@ -24,7 +24,8 @@ export function palmObservation(sample:Extract<FrameSample,{validity:'valid'}>,v
 }
 type Observation=ReturnType<typeof palmObservation>;
 /** Bounded memory-only window. Calling after success returns the frozen accepted calibration. */
-export function createPalmCalibrator(video:Size,overrides:Partial<PalmCalibrationConfig>={}) {
+export function createPalmCalibrator(video:Size,overrides:Partial<PalmCalibrationConfig>={},purpose:'open_hand'|'desk_geometry'='open_hand') {
+  if(purpose!=='open_hand'&&purpose!=='desk_geometry')throw new MathInputError('Invalid palm calibration purpose');
   validateSize(video);const config={...CALIBRATION_CONFIG,...overrides};validatePositiveConfig(config);
   if(!Number.isInteger(config.minSamples)||!Number.isInteger(config.maxBufferedSamples)||config.maxBufferedSamples<config.minSamples||config.minHandConfidence>1||config.maxOpenFlexionDeg>180)throw new MathInputError('Invalid palm calibration configuration');
   let observations:Observation[]=[],lastSequence=-1,lastCapture=-1,lastNow=-1;
@@ -48,8 +49,9 @@ export function createPalmCalibrator(video:Size,overrides:Partial<PalmCalibratio
       if(sample.imageLandmarks.some(p=>p.x<0||p.x>1||p.y<0||p.y>1))return restart('occlusion');
       const o=palmObservation(sample,video);
       if(o.palmPixels<config.minPalmPixels)return restart('small_palm');
-      // Open-palm gate across four fingers: unsigned PIP/DIP estimates, not a clinical posture test.
-      for(const base of [5,9,13,17])for(const j of [1,2]){
+      // Desk scale/orientation does not require an absolute finger-angle estimate.
+      // Keep the open-hand posture gate for air mode; desk contact is calibrated separately.
+      if(purpose==='open_hand')for(const base of [5,9,13,17])for(const j of [1,2]){
         const bend=flexionDeg(sample.worldLandmarks[base+j-1]!,sample.worldLandmarks[base+j]!,sample.worldLandmarks[base+j+1]!);
         if(bend>config.maxOpenFlexionDeg){
           const finger=({5:'Index',9:'Middle',13:'Ring',17:'Pinky'} as Record<number,string>)[base];

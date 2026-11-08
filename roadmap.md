@@ -138,6 +138,8 @@ Run typecheck, Vitest, production build, and browser tests. Inspect request payl
 
 ## Phase 7 — Replace stubs with the final presentation
 
+**Guided routine follow-up (2026-11-07):** user authorized automatic camera counting, live correction tips, and automatic set/exercise progression now. Implemented independently of timed trial scoring; wrist exercises are explicitly approved palm-tilt proxies. See `docs/progress.md` for bounded test evidence and pending live validation. This does not pass the existing live P0 gate or all Phase 7 acceptance.
+
 **Deliver:** concise setup/workstation/results UI, readable mirrored canvas overlays, useful feedback, and a collapsible diagnostics view. The underlying controllers and algorithms remain independently tested.
 
 **Acceptance:** both live exercises and replay still pass; styling/view replacement does not alter scoring or timing; accessible focus/text status, reduced motion, narrow-window overflow, and demo/projector legibility are checked. Sensor mode/source remains visible. No made-up charts, historical gains, test status, or clinical claims.

@@ -2,12 +2,13 @@ import type { AudioDiagnostics } from '../adapters/audio';
 import type { FusedEvent } from '../lib/acousticTap';
 import type { AirTargetState } from '../lib/spatialTargets';
 import type { DeskCalibrationState, DeskRegion, DeskVisualState, VisualCandidate } from '../lib/deskVisual';
-import type { Size } from '../lib/coordinates';
+import type { Size, SourcePixel } from '../lib/coordinates';
 import type { AudioImpulse, Calibration, FrameSample, SessionTelemetry } from '../lib/schemas';
 export type ExerciseSelection = { exercise: 'air_targets'; sensorMode: 'vision_only' } | { exercise: 'desk_tap'; sensorMode: 'fused' | 'kinematic_only' };
 export type SessionPhase = 'idle' | 'requesting' | 'ready' | 'calibrating' | 'calibrated' | 'countdown' | 'running' | 'complete' | 'error';
 export interface SessionSnapshot {
   readonly source: 'live' | 'synthetic_replay';
+  readonly deskLayout:'single'|'left_right';
   readonly selection: ExerciseSelection;
   readonly phase: SessionPhase;
   readonly message: string;
@@ -33,8 +34,10 @@ export interface FusionSnapshot {
 }
 export const emptyFusion=():FusionSnapshot=>({visualCount:0,audioCount:0,fusedCount:0,rejectedAudioCount:0,lastRejection:null,lastAudio:null,lastFused:null,trace:[],timingPairs:0,timingRecording:false,timingRequired:false});
 export interface DeskSnapshot {
+  readonly pads?:readonly {id:'left'|'right';region:DeskRegion}[];
+  readonly leftTapCount?:number; readonly rightTapCount?:number;
   readonly placing:boolean; readonly region:DeskRegion|null; readonly setup:DeskCalibrationState|null;
-  readonly acceptedTapCount:number; readonly lastAccepted:{atMs:number;mode:'fused'|'kinematic_only'}|null;
+  readonly acceptedTapCount:number; readonly lastAccepted:{atMs:number;mode:'fused'|'kinematic_only';position?:SourcePixel;pad?:'left'|'right'}|null;
   readonly visual:DeskVisualState|null; readonly visualCandidateCount:number; readonly lastCandidate:VisualCandidate|null;
 }
 /** Numeric-only diagnostics; media never enters a UI snapshot. */
@@ -63,6 +66,7 @@ export interface SessionDiagnostics {
   readonly throttleMs?: number;
 }
 export interface ControllerCommands {
+  setDeskLayout(layout:'single'|'left_right'):void;
   tick(): void;
   setHidden(hidden:boolean):void;
   startDevices(): Promise<void>;
@@ -84,7 +88,7 @@ export interface ControllerCommands {
   selectExercise(selection: ExerciseSelection): void;
   dispose(): void;
 }
-export interface FrameBuffer { current: FrameSample | null; target?: AirTargetState | null; desk?:Pick<DeskSnapshot,'region'|'visual'|'lastCandidate'|'lastAccepted'>|null; video?: Size; media?: HTMLVideoElement | null; recordRender?: () => void }
+export interface FrameBuffer { subscribeFrames?: (listener:(sample:FrameSample)=>void)=>(()=>void); current: FrameSample | null; target?: AirTargetState | null; desk?:Pick<DeskSnapshot,'region'|'visual'|'lastCandidate'|'lastAccepted'|'pads'>|null; video?: Size; media?: HTMLVideoElement | null; recordRender?: () => void }
 export interface SessionController extends ControllerCommands {
   getSnapshot(): SessionSnapshot;
   subscribe(listener: () => void): () => void;
@@ -107,5 +111,5 @@ export interface SessionAdapter {
   dispose(): void;
 }
 export function initialSnapshot(source: SessionSnapshot['source']): SessionSnapshot {
-  return { source, selection: { exercise: 'air_targets', sensorMode: 'vision_only' }, phase: 'idle', message: source === 'live' ? 'Start camera to request video only. Request the microphone separately for fused desk mode.' : 'Start the synthetic adapter. No camera or microphone is used.', calibration: null, calibrationStatus: 'not_started', tracking: 'not_started', target: null, air:null, desk:null, calibrationMessage:'Not started', metrics: { rawEstimatedPipDeg:null, estimatedPipDeg: null, estimatedDipDeg:null, estimatedMcpProxyDeg:null, acceptedCount: null }, diagnostics: { replayFrames: 0, renderFps: null, inferenceFps: null, inferenceDurationMs: null, resultAgeMs: null, delegate: 'not_started', assets: 'unchecked', assetMessage: 'Asset verification has not run.' }, audio:{state:'not_started',message:'Microphone has not been requested.',sampleRate:null,settings:'not measured',clock:null,level:null},fusion:emptyFusion(),result: null, trial:null };
+  return { source, deskLayout:'single', selection: { exercise: 'air_targets', sensorMode: 'vision_only' }, phase: 'idle', message: source === 'live' ? 'Start camera to request video only. Request the microphone separately for fused desk mode.' : 'Start the synthetic adapter. No camera or microphone is used.', calibration: null, calibrationStatus: 'not_started', tracking: 'not_started', target: null, air:null, desk:null, calibrationMessage:'Not started', metrics: { rawEstimatedPipDeg:null, estimatedPipDeg: null, estimatedDipDeg:null, estimatedMcpProxyDeg:null, acceptedCount: null }, diagnostics: { replayFrames: 0, renderFps: null, inferenceFps: null, inferenceDurationMs: null, resultAgeMs: null, delegate: 'not_started', assets: 'unchecked', assetMessage: 'Asset verification has not run.' }, audio:{state:'not_started',message:'Microphone has not been requested.',sampleRate:null,settings:'not measured',clock:null,level:null},fusion:emptyFusion(),result: null, trial:null };
 }

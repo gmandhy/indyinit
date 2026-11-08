@@ -10,6 +10,8 @@ Views consume `SessionSnapshot` and controller commands. High-frequency canvas d
 
 Initially: device start/stop buttons, mode selector, tracked-hand status, retry/error text, calibration progress, and simple positioning instructions. Request camera and microphone separately from user action. Palm calibration uses three seconds of stable observations; desk calibration separately places a ring and records rest plus guided lift/taps. Show explicit failure/retry for insufficient motion, noise, or tracking.
 
+Desk tapping now uses one task card beside the camera: camera, microphone where required, palm, placement/rest/cycles for each pad, timing where required, and final setup confirmation. The controller supplies completion evidence; a disabled-until-complete confirmation advances the card. Invalidated prerequisites revoke later acknowledgements. Show saved-cycle/pair progress and retry instructions, retain restart/stop, and put low-level controls in collapsible Advanced desk controls.
+
 Later: concise guided setup showing the required camera angle and desk region. Display microphone degradation and chosen hand clearly. No therapist prescription builder or account setup is required.
 
 ## 2. Workstation
@@ -35,3 +37,9 @@ Only after the core and presentation pass: an explicit send-summary action, load
 ## Presentation acceptance
 
 A new user should complete setup, an air target, desk tapping, results, and reset with minimal narration. Validate on the demo laptop and projector-sized viewport, plus a narrow window for overflow. Replay must stay visibly marked “Synthetic replay” in every state. Do not imply mobile hardware support without testing it.
+
+## Guided routine follow-up
+
+The guided route uses automatic local camera estimates, independently of timed air/desk trial scoring. Start camera once, follow the live correction cue, and complete a movement/hold/return cycle per repetition. Sets and exercises advance without Record/Next actions; the final task returns to the checklist and releases devices. Pause, tracking loss, stale samples, hidden tabs, and hand switches clear the unfinished cycle. Completed repetitions remain.
+
+Open Hand and Make a Fist estimate four finger bends, without verifying thumb pose. Wrist Extension/Flexion are explicitly labeled palm-tilt proxy practice: a stable neutral reference, a held tilt, and return. The camera cannot establish wrist direction, anatomical wrist angle, or forearm support. Show these limits beside the instruction; do not mark a trial or clinical assessment passed from routine completion. The checklist remains editable and memory-only.

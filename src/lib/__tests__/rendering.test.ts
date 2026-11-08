@@ -3,7 +3,7 @@ import { drawReplayPreview } from '../../rendering/replayPreview';
 import { syntheticHandFrame } from '../../../fixtures/syntheticHand';
 import { containFit, imageToPixels, sourcePixel, sourceToDisplay } from '../coordinates';
 function context() {
-  return {clearRect:vi.fn(),save:vi.fn(),translate:vi.fn(),scale:vi.fn(),drawImage:vi.fn(),restore:vi.fn(),strokeRect:vi.fn(),beginPath:vi.fn(),arc:vi.fn(),fill:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),stroke:vi.fn(),fillText:vi.fn()} as unknown as CanvasRenderingContext2D;
+  return {clearRect:vi.fn(),save:vi.fn(),translate:vi.fn(),scale:vi.fn(),drawImage:vi.fn(),restore:vi.fn(),strokeRect:vi.fn(),beginPath:vi.fn(),arc:vi.fn(),fill:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),stroke:vi.fn(),fillRect:vi.fn(),fillText:vi.fn()} as unknown as CanvasRenderingContext2D;
 }
 describe('live skeleton/video presentation',()=>{
   it('mirrors only the video draw transform and maps all 21 joints through the identical letterboxed fit',()=>{
@@ -17,6 +17,25 @@ describe('live skeleton/video presentation',()=>{
       expect(ctx.arc).toHaveBeenCalledTimes(21);expect(ctx.arc).toHaveBeenNthCalledWith(1,first.x,first.y,3,0,Math.PI*2);
       expect(ctx.moveTo).toHaveBeenCalledTimes(21);
     }
+  });
+  it('keeps the accepted camera location at the mirrored source position after the ring flash',()=>{
+    const ctx=context(),video={width:640,height:480},viewport={width:800,height:400},position=sourcePixel(260,205);
+    const desk={region:{center:sourcePixel(250,200),radiusPixels:25},visual:null,lastCandidate:null,lastAccepted:{atMs:80,mode:'fused' as const,position}};
+    drawReplayPreview(ctx,{current:null,desk,video},viewport,1000);
+    const p=sourceToDisplay(position,containFit(video,viewport,true));
+    expect(ctx.arc).toHaveBeenCalledWith(p.x,p.y,6,0,Math.PI*2);
+    expect(ctx.fill).toHaveBeenCalledTimes(1);
+    expect(desk.lastAccepted.position).toEqual(sourcePixel(260,205));
+  });
+  it('draws Left and Right with only the matched pad highlighted, mirrored exactly once',()=>{
+    const ctx=context(),video={width:640,height:480},viewport={width:800,height:400};
+    const left={id:'left' as const,region:{center:sourcePixel(450,200),radiusPixels:25}},right={id:'right' as const,region:{center:sourcePixel(190,200),radiusPixels:25}};
+    drawReplayPreview(ctx,{current:null,video,desk:{region:right.region,pads:[left,right],visual:null,lastCandidate:null,lastAccepted:{atMs:80,mode:'fused',pad:'left',position:sourcePixel(450,200)}}},viewport,100);
+    expect(ctx.arc).toHaveBeenCalledTimes(3); // two rings and one contact marker, no duplicate active ring
+    expect(ctx.fillText).toHaveBeenCalledWith('Left · tap',expect.any(Number),expect.any(Number));
+    expect(ctx.fillText).toHaveBeenCalledWith('Right',expect.any(Number),expect.any(Number));
+    const p=sourceToDisplay(left.region.center,containFit(video,viewport,true));
+    expect(ctx.arc).toHaveBeenLastCalledWith(p.x,p.y,6,0,Math.PI*2);
   });
   it('continues drawing video while clearing stale/lost skeletons',()=>{
     const ctx=context(),media={readyState:2} as HTMLVideoElement;

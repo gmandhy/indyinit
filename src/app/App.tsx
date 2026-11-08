@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { GuidedRoutine } from '../components/workstation/GuidedRoutine';
 import { useSessionController } from '../hooks/useSessionController';
-import { Dashboard, Exercises, GuidedRoutine, Progress, Shell, TrackedSession, dayKey } from '../components/workstation/Workspace';
+import { Dashboard, Exercises, Progress, Shell, TrackedSession, dayKey } from '../components/workstation/Workspace';
 import type { PageName, TrialRecord } from '../components/workstation/Workspace';
 const readPage = (): PageName => {
   const hash = window.location.hash.slice(1);
